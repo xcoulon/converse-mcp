@@ -16,6 +16,5 @@ task test lint
 
 2. Install the `go-jsonschema` generator from https://github.com/omissis/go-jsonschema then run:
    ```
-   go install github.com/atombender/go-jsonschema@latest
-   go-jsonschema -p internal/types resources/schema.json > pkg/types/types.go
+   task generate
    ```

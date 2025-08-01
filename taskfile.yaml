@@ -1,6 +1,11 @@
 version: '3'
 
 tasks:
+  generate:
+    cmds:
+      - go install github.com/atombender/go-jsonschema@latest
+      - go-jsonschema -p internal/types resources/schema.json > pkg/types/types.go
+
   test:
     cmds:
       - go test ./... -v --failfast

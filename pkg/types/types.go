@@ -3,6 +3,7 @@
 package types
 
 import "encoding/json"
+import "errors"
 import "fmt"
 import "reflect"
 
@@ -15,6 +16,14 @@ type Annotations struct {
 	// audiences (e.g., `["user", "assistant"]`).
 	Audience []Role `json:"audience,omitempty" yaml:"audience,omitempty" mapstructure:"audience,omitempty"`
 
+	// The moment the resource was last modified, as an ISO 8601 formatted string.
+	//
+	// Should be an ISO 8601 formatted string (e.g., "2025-01-12T15:00:58Z").
+	//
+	// Examples: last activity timestamp in an open file, timestamp when the resource
+	// was attached, etc.
+	LastModified *string `json:"lastModified,omitempty" yaml:"lastModified,omitempty" mapstructure:"lastModified,omitempty"`
+
 	// Describes how important this data is for operating the server.
 	//
 	// A value of 1 means "most important," and indicates that the data is
@@ -24,10 +33,10 @@ type Annotations struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *Annotations) UnmarshalJSON(b []byte) error {
+func (j *Annotations) UnmarshalJSON(value []byte) error {
 	type Plain Annotations
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	if plain.Priority != nil && 1 < *plain.Priority {
@@ -42,6 +51,10 @@ func (j *Annotations) UnmarshalJSON(b []byte) error {
 
 // Audio provided to or from an LLM.
 type AudioContent struct {
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+
 	// Optional annotations for the client.
 	Annotations *Annotations `json:"annotations,omitempty" yaml:"annotations,omitempty" mapstructure:"annotations,omitempty"`
 
@@ -57,9 +70,9 @@ type AudioContent struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *AudioContent) UnmarshalJSON(b []byte) error {
+func (j *AudioContent) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["data"]; raw != nil && !ok {
@@ -73,14 +86,53 @@ func (j *AudioContent) UnmarshalJSON(b []byte) error {
 	}
 	type Plain AudioContent
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = AudioContent(plain)
 	return nil
 }
 
+// Base interface for metadata with name (identifier) and title (display name)
+// properties.
+type BaseMetadata struct {
+	// Intended for programmatic or logical use, but used as a display name in past
+	// specs or fallback (if title isn't present).
+	Name string `json:"name" yaml:"name" mapstructure:"name"`
+
+	// Intended for UI and end-user contexts — optimized to be human-readable and
+	// easily understood,
+	// even by those unfamiliar with domain-specific terminology.
+	//
+	// If not provided, the name should be used for display (except for Tool,
+	// where `annotations.title` should be given precedence over using `name`,
+	// if present).
+	Title *string `json:"title,omitempty" yaml:"title,omitempty" mapstructure:"title,omitempty"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *BaseMetadata) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["name"]; raw != nil && !ok {
+		return fmt.Errorf("field name in BaseMetadata: required")
+	}
+	type Plain BaseMetadata
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	*j = BaseMetadata(plain)
+	return nil
+}
+
 type BlobResourceContents struct {
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+
 	// A base64-encoded string representing the binary data of the item.
 	Blob string `json:"blob" yaml:"blob" mapstructure:"blob"`
 
@@ -92,9 +144,9 @@ type BlobResourceContents struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *BlobResourceContents) UnmarshalJSON(b []byte) error {
+func (j *BlobResourceContents) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["blob"]; raw != nil && !ok {
@@ -105,10 +157,42 @@ func (j *BlobResourceContents) UnmarshalJSON(b []byte) error {
 	}
 	type Plain BlobResourceContents
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = BlobResourceContents(plain)
+	return nil
+}
+
+type BooleanSchema struct {
+	// Default corresponds to the JSON schema field "default".
+	Default *bool `json:"default,omitempty" yaml:"default,omitempty" mapstructure:"default,omitempty"`
+
+	// Description corresponds to the JSON schema field "description".
+	Description *string `json:"description,omitempty" yaml:"description,omitempty" mapstructure:"description,omitempty"`
+
+	// Title corresponds to the JSON schema field "title".
+	Title *string `json:"title,omitempty" yaml:"title,omitempty" mapstructure:"title,omitempty"`
+
+	// Type corresponds to the JSON schema field "type".
+	Type string `json:"type" yaml:"type" mapstructure:"type"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *BooleanSchema) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["type"]; raw != nil && !ok {
+		return fmt.Errorf("field type in BooleanSchema: required")
+	}
+	type Plain BooleanSchema
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	*j = BooleanSchema(plain)
 	return nil
 }
 
@@ -123,18 +207,16 @@ type CallToolRequest struct {
 
 type CallToolRequestParams struct {
 	// Arguments corresponds to the JSON schema field "arguments".
-	Arguments CallToolRequestParamsArguments `json:"arguments,omitempty" yaml:"arguments,omitempty" mapstructure:"arguments,omitempty"`
+	Arguments map[string]interface{} `json:"arguments,omitempty" yaml:"arguments,omitempty" mapstructure:"arguments,omitempty"`
 
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name" yaml:"name" mapstructure:"name"`
 }
 
-type CallToolRequestParamsArguments map[string]interface{}
-
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *CallToolRequestParams) UnmarshalJSON(b []byte) error {
+func (j *CallToolRequestParams) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["name"]; raw != nil && !ok {
@@ -142,7 +224,7 @@ func (j *CallToolRequestParams) UnmarshalJSON(b []byte) error {
 	}
 	type Plain CallToolRequestParams
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = CallToolRequestParams(plain)
@@ -150,9 +232,9 @@ func (j *CallToolRequestParams) UnmarshalJSON(b []byte) error {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *CallToolRequest) UnmarshalJSON(b []byte) error {
+func (j *CallToolRequest) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -163,7 +245,7 @@ func (j *CallToolRequest) UnmarshalJSON(b []byte) error {
 	}
 	type Plain CallToolRequest
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = CallToolRequest(plain)
@@ -171,37 +253,39 @@ func (j *CallToolRequest) UnmarshalJSON(b []byte) error {
 }
 
 // The server's response to a tool call.
-//
-// Any errors that originate from the tool SHOULD be reported inside the result
-// object, with `isError` set to true, _not_ as an MCP protocol-level error
-// response. Otherwise, the LLM would not be able to see that an error occurred
-// and self-correct.
-//
-// However, any errors in _finding_ the tool, an error indicating that the
-// server does not support tool calls, or any other exceptional conditions,
-// should be reported as an MCP error response.
 type CallToolResult struct {
-	// This result property is reserved by the protocol to allow clients and servers
-	// to attach additional metadata to their responses.
-	Meta CallToolResultMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
-	// Content corresponds to the JSON schema field "content".
-	Content []interface{} `json:"content" yaml:"content" mapstructure:"content"`
+	// A list of content objects that represent the unstructured result of the tool
+	// call.
+	Content []CallToolResultContentElem `json:"content" yaml:"content" mapstructure:"content"`
 
 	// Whether the tool call ended in an error.
 	//
 	// If not set, this is assumed to be false (the call was successful).
+	//
+	// Any errors that originate from the tool SHOULD be reported inside the result
+	// object, with `isError` set to true, _not_ as an MCP protocol-level error
+	// response. Otherwise, the LLM would not be able to see that an error occurred
+	// and self-correct.
+	//
+	// However, any errors in _finding_ the tool, an error indicating that the
+	// server does not support tool calls, or any other exceptional conditions,
+	// should be reported as an MCP error response.
 	IsError *bool `json:"isError,omitempty" yaml:"isError,omitempty" mapstructure:"isError,omitempty"`
+
+	// An optional JSON object that represents the structured result of the tool call.
+	StructuredContent map[string]interface{} `json:"structuredContent,omitempty" yaml:"structuredContent,omitempty" mapstructure:"structuredContent,omitempty"`
 }
 
-// This result property is reserved by the protocol to allow clients and servers to
-// attach additional metadata to their responses.
-type CallToolResultMeta map[string]interface{}
+type CallToolResultContentElem interface{}
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *CallToolResult) UnmarshalJSON(b []byte) error {
+func (j *CallToolResult) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["content"]; raw != nil && !ok {
@@ -209,7 +293,7 @@ func (j *CallToolResult) UnmarshalJSON(b []byte) error {
 	}
 	type Plain CallToolResult
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = CallToolResult(plain)
@@ -248,9 +332,9 @@ type CancelledNotificationParams struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *CancelledNotificationParams) UnmarshalJSON(b []byte) error {
+func (j *CancelledNotificationParams) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["requestId"]; raw != nil && !ok {
@@ -258,7 +342,7 @@ func (j *CancelledNotificationParams) UnmarshalJSON(b []byte) error {
 	}
 	type Plain CancelledNotificationParams
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = CancelledNotificationParams(plain)
@@ -266,9 +350,9 @@ func (j *CancelledNotificationParams) UnmarshalJSON(b []byte) error {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *CancelledNotification) UnmarshalJSON(b []byte) error {
+func (j *CancelledNotification) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -279,7 +363,7 @@ func (j *CancelledNotification) UnmarshalJSON(b []byte) error {
 	}
 	type Plain CancelledNotification
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = CancelledNotification(plain)
@@ -290,27 +374,24 @@ func (j *CancelledNotification) UnmarshalJSON(b []byte) error {
 // schema, but this is not a closed set: any client can define its own, additional
 // capabilities.
 type ClientCapabilities struct {
+	// Present if the client supports elicitation from the server.
+	Elicitation map[string]interface{} `json:"elicitation,omitempty" yaml:"elicitation,omitempty" mapstructure:"elicitation,omitempty"`
+
 	// Experimental, non-standard capabilities that the client supports.
-	Experimental ClientCapabilitiesExperimental `json:"experimental,omitempty" yaml:"experimental,omitempty" mapstructure:"experimental,omitempty"`
+	Experimental map[string]map[string]interface{} `json:"experimental,omitempty" yaml:"experimental,omitempty" mapstructure:"experimental,omitempty"`
 
 	// Present if the client supports listing roots.
 	Roots *ClientCapabilitiesRoots `json:"roots,omitempty" yaml:"roots,omitempty" mapstructure:"roots,omitempty"`
 
 	// Present if the client supports sampling from an LLM.
-	Sampling ClientCapabilitiesSampling `json:"sampling,omitempty" yaml:"sampling,omitempty" mapstructure:"sampling,omitempty"`
+	Sampling map[string]interface{} `json:"sampling,omitempty" yaml:"sampling,omitempty" mapstructure:"sampling,omitempty"`
 }
-
-// Experimental, non-standard capabilities that the client supports.
-type ClientCapabilitiesExperimental map[string]map[string]interface{}
 
 // Present if the client supports listing roots.
 type ClientCapabilitiesRoots struct {
 	// Whether the client supports notifications for changes to the roots list.
 	ListChanged *bool `json:"listChanged,omitempty" yaml:"listChanged,omitempty" mapstructure:"listChanged,omitempty"`
 }
-
-// Present if the client supports sampling from an LLM.
-type ClientCapabilitiesSampling map[string]interface{}
 
 type ClientNotification interface{}
 
@@ -331,8 +412,11 @@ type CompleteRequestParams struct {
 	// The argument's information
 	Argument CompleteRequestParamsArgument `json:"argument" yaml:"argument" mapstructure:"argument"`
 
+	// Additional, optional context for completions
+	Context *CompleteRequestParamsContext `json:"context,omitempty" yaml:"context,omitempty" mapstructure:"context,omitempty"`
+
 	// Ref corresponds to the JSON schema field "ref".
-	Ref interface{} `json:"ref" yaml:"ref" mapstructure:"ref"`
+	Ref CompleteRequestParamsRef `json:"ref" yaml:"ref" mapstructure:"ref"`
 }
 
 // The argument's information
@@ -345,9 +429,9 @@ type CompleteRequestParamsArgument struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *CompleteRequestParamsArgument) UnmarshalJSON(b []byte) error {
+func (j *CompleteRequestParamsArgument) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["name"]; raw != nil && !ok {
@@ -358,17 +442,72 @@ func (j *CompleteRequestParamsArgument) UnmarshalJSON(b []byte) error {
 	}
 	type Plain CompleteRequestParamsArgument
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = CompleteRequestParamsArgument(plain)
 	return nil
 }
 
+// Additional, optional context for completions
+type CompleteRequestParamsContext struct {
+	// Previously-resolved variables in a URI template or prompt.
+	Arguments map[string]string `json:"arguments,omitempty" yaml:"arguments,omitempty" mapstructure:"arguments,omitempty"`
+}
+
+// Identifies a prompt.
+type CompleteRequestParamsRef struct {
+	// Intended for programmatic or logical use, but used as a display name in past
+	// specs or fallback (if title isn't present).
+	Name string `json:"name" yaml:"name" mapstructure:"name"`
+
+	// Intended for UI and end-user contexts — optimized to be human-readable and
+	// easily understood,
+	// even by those unfamiliar with domain-specific terminology.
+	//
+	// If not provided, the name should be used for display (except for Tool,
+	// where `annotations.title` should be given precedence over using `name`,
+	// if present).
+	Title *string `json:"title,omitempty" yaml:"title,omitempty" mapstructure:"title,omitempty"`
+
+	// Type corresponds to the JSON schema field "type".
+	Type string `json:"type" yaml:"type" mapstructure:"type"`
+
+	// The URI or URI template of the resource.
+	Uri string `json:"uri" yaml:"uri" mapstructure:"uri"`
+}
+
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *CompleteRequestParams) UnmarshalJSON(b []byte) error {
+func (j *CompleteRequestParamsRef) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	var completeRequestParamsRef_0 CompleteRequestParamsRef_0
+	var completeRequestParamsRef_1 CompleteRequestParamsRef_1
+	var errs []error
+	if err := completeRequestParamsRef_0.UnmarshalJSON(value); err != nil {
+		errs = append(errs, err)
+	}
+	if err := completeRequestParamsRef_1.UnmarshalJSON(value); err != nil {
+		errs = append(errs, err)
+	}
+	if len(errs) == 2 {
+		return fmt.Errorf("all validators failed: %s", errors.Join(errs...))
+	}
+	type Plain CompleteRequestParamsRef
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	*j = CompleteRequestParamsRef(plain)
+	return nil
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *CompleteRequestParams) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["argument"]; raw != nil && !ok {
@@ -379,7 +518,7 @@ func (j *CompleteRequestParams) UnmarshalJSON(b []byte) error {
 	}
 	type Plain CompleteRequestParams
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = CompleteRequestParams(plain)
@@ -387,9 +526,9 @@ func (j *CompleteRequestParams) UnmarshalJSON(b []byte) error {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *CompleteRequest) UnmarshalJSON(b []byte) error {
+func (j *CompleteRequest) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -400,7 +539,7 @@ func (j *CompleteRequest) UnmarshalJSON(b []byte) error {
 	}
 	type Plain CompleteRequest
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = CompleteRequest(plain)
@@ -409,9 +548,9 @@ func (j *CompleteRequest) UnmarshalJSON(b []byte) error {
 
 // The server's response to a completion/complete request
 type CompleteResult struct {
-	// This result property is reserved by the protocol to allow clients and servers
-	// to attach additional metadata to their responses.
-	Meta CompleteResultMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
 	// Completion corresponds to the JSON schema field "completion".
 	Completion CompleteResultCompletion `json:"completion" yaml:"completion" mapstructure:"completion"`
@@ -431,9 +570,9 @@ type CompleteResultCompletion struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *CompleteResultCompletion) UnmarshalJSON(b []byte) error {
+func (j *CompleteResultCompletion) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["values"]; raw != nil && !ok {
@@ -441,21 +580,17 @@ func (j *CompleteResultCompletion) UnmarshalJSON(b []byte) error {
 	}
 	type Plain CompleteResultCompletion
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = CompleteResultCompletion(plain)
 	return nil
 }
 
-// This result property is reserved by the protocol to allow clients and servers to
-// attach additional metadata to their responses.
-type CompleteResultMeta map[string]interface{}
-
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *CompleteResult) UnmarshalJSON(b []byte) error {
+func (j *CompleteResult) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["completion"]; raw != nil && !ok {
@@ -463,12 +598,14 @@ func (j *CompleteResult) UnmarshalJSON(b []byte) error {
 	}
 	type Plain CompleteResult
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = CompleteResult(plain)
 	return nil
 }
+
+type ContentBlock interface{}
 
 // A request from the server to sample an LLM via the client. The client has full
 // discretion over which model to select. The client should also inform the user
@@ -496,7 +633,7 @@ type CreateMessageRequestParams struct {
 
 	// Optional metadata to pass through to the LLM provider. The format of this
 	// metadata is provider-specific.
-	Metadata CreateMessageRequestParamsMetadata `json:"metadata,omitempty" yaml:"metadata,omitempty" mapstructure:"metadata,omitempty"`
+	Metadata map[string]interface{} `json:"metadata,omitempty" yaml:"metadata,omitempty" mapstructure:"metadata,omitempty"`
 
 	// The server's preferences for which model to select. The client MAY ignore these
 	// preferences.
@@ -526,9 +663,9 @@ var enumValues_CreateMessageRequestParamsIncludeContext = []interface{}{
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *CreateMessageRequestParamsIncludeContext) UnmarshalJSON(b []byte) error {
+func (j *CreateMessageRequestParamsIncludeContext) UnmarshalJSON(value []byte) error {
 	var v string
-	if err := json.Unmarshal(b, &v); err != nil {
+	if err := json.Unmarshal(value, &v); err != nil {
 		return err
 	}
 	var ok bool
@@ -545,14 +682,10 @@ func (j *CreateMessageRequestParamsIncludeContext) UnmarshalJSON(b []byte) error
 	return nil
 }
 
-// Optional metadata to pass through to the LLM provider. The format of this
-// metadata is provider-specific.
-type CreateMessageRequestParamsMetadata map[string]interface{}
-
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *CreateMessageRequestParams) UnmarshalJSON(b []byte) error {
+func (j *CreateMessageRequestParams) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["maxTokens"]; raw != nil && !ok {
@@ -563,7 +696,7 @@ func (j *CreateMessageRequestParams) UnmarshalJSON(b []byte) error {
 	}
 	type Plain CreateMessageRequestParams
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = CreateMessageRequestParams(plain)
@@ -571,9 +704,9 @@ func (j *CreateMessageRequestParams) UnmarshalJSON(b []byte) error {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *CreateMessageRequest) UnmarshalJSON(b []byte) error {
+func (j *CreateMessageRequest) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -584,7 +717,7 @@ func (j *CreateMessageRequest) UnmarshalJSON(b []byte) error {
 	}
 	type Plain CreateMessageRequest
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = CreateMessageRequest(plain)
@@ -596,12 +729,12 @@ func (j *CreateMessageRequest) UnmarshalJSON(b []byte) error {
 // them to inspect the response (human in the loop) and decide whether to allow the
 // server to see it.
 type CreateMessageResult struct {
-	// This result property is reserved by the protocol to allow clients and servers
-	// to attach additional metadata to their responses.
-	Meta CreateMessageResultMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
 	// Content corresponds to the JSON schema field "content".
-	Content interface{} `json:"content" yaml:"content" mapstructure:"content"`
+	Content CreateMessageResultContent `json:"content" yaml:"content" mapstructure:"content"`
 
 	// The name of the model that generated the message.
 	Model string `json:"model" yaml:"model" mapstructure:"model"`
@@ -613,14 +746,64 @@ type CreateMessageResult struct {
 	StopReason *string `json:"stopReason,omitempty" yaml:"stopReason,omitempty" mapstructure:"stopReason,omitempty"`
 }
 
-// This result property is reserved by the protocol to allow clients and servers to
-// attach additional metadata to their responses.
-type CreateMessageResultMeta map[string]interface{}
+// Text provided to or from an LLM.
+type CreateMessageResultContent struct {
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+
+	// Optional annotations for the client.
+	Annotations *Annotations `json:"annotations,omitempty" yaml:"annotations,omitempty" mapstructure:"annotations,omitempty"`
+
+	// The base64-encoded image data.
+	Data string `json:"data" yaml:"data" mapstructure:"data"`
+
+	// The MIME type of the image. Different providers may support different image
+	// types.
+	MimeType string `json:"mimeType" yaml:"mimeType" mapstructure:"mimeType"`
+
+	// The text content of the message.
+	Text string `json:"text" yaml:"text" mapstructure:"text"`
+
+	// Type corresponds to the JSON schema field "type".
+	Type string `json:"type" yaml:"type" mapstructure:"type"`
+}
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *CreateMessageResult) UnmarshalJSON(b []byte) error {
+func (j *CreateMessageResultContent) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	var createMessageResultContent_0 CreateMessageResultContent_0
+	var createMessageResultContent_1 CreateMessageResultContent_1
+	var createMessageResultContent_2 CreateMessageResultContent_2
+	var errs []error
+	if err := createMessageResultContent_0.UnmarshalJSON(value); err != nil {
+		errs = append(errs, err)
+	}
+	if err := createMessageResultContent_1.UnmarshalJSON(value); err != nil {
+		errs = append(errs, err)
+	}
+	if err := createMessageResultContent_2.UnmarshalJSON(value); err != nil {
+		errs = append(errs, err)
+	}
+	if len(errs) == 3 {
+		return fmt.Errorf("all validators failed: %s", errors.Join(errs...))
+	}
+	type Plain CreateMessageResultContent
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	*j = CreateMessageResultContent(plain)
+	return nil
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *CreateMessageResult) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["content"]; raw != nil && !ok {
@@ -634,7 +817,7 @@ func (j *CreateMessageResult) UnmarshalJSON(b []byte) error {
 	}
 	type Plain CreateMessageResult
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = CreateMessageResult(plain)
@@ -644,25 +827,237 @@ func (j *CreateMessageResult) UnmarshalJSON(b []byte) error {
 // An opaque token used to represent a cursor for pagination.
 type Cursor string
 
-// The contents of a resource, embedded into a prompt or tool call result.
-//
-// It is up to the client how best to render embedded resources for the benefit
-// of the LLM and/or the user.
-type EmbeddedResource struct {
-	// Optional annotations for the client.
-	Annotations *Annotations `json:"annotations,omitempty" yaml:"annotations,omitempty" mapstructure:"annotations,omitempty"`
+// A request from the server to elicit additional information from the user via the
+// client.
+type ElicitRequest struct {
+	// Method corresponds to the JSON schema field "method".
+	Method string `json:"method" yaml:"method" mapstructure:"method"`
 
-	// Resource corresponds to the JSON schema field "resource".
-	Resource interface{} `json:"resource" yaml:"resource" mapstructure:"resource"`
+	// Params corresponds to the JSON schema field "params".
+	Params ElicitRequestParams `json:"params" yaml:"params" mapstructure:"params"`
+}
+
+type ElicitRequestParams struct {
+	// The message to present to the user.
+	Message string `json:"message" yaml:"message" mapstructure:"message"`
+
+	// A restricted subset of JSON Schema.
+	// Only top-level properties are allowed, without nesting.
+	RequestedSchema ElicitRequestParamsRequestedSchema `json:"requestedSchema" yaml:"requestedSchema" mapstructure:"requestedSchema"`
+}
+
+// A restricted subset of JSON Schema.
+// Only top-level properties are allowed, without nesting.
+type ElicitRequestParamsRequestedSchema struct {
+	// Properties corresponds to the JSON schema field "properties".
+	Properties map[string]interface{} `json:"properties" yaml:"properties" mapstructure:"properties"`
+
+	// Required corresponds to the JSON schema field "required".
+	Required []string `json:"required,omitempty" yaml:"required,omitempty" mapstructure:"required,omitempty"`
 
 	// Type corresponds to the JSON schema field "type".
 	Type string `json:"type" yaml:"type" mapstructure:"type"`
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *EmbeddedResource) UnmarshalJSON(b []byte) error {
+func (j *ElicitRequestParamsRequestedSchema) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["properties"]; raw != nil && !ok {
+		return fmt.Errorf("field properties in ElicitRequestParamsRequestedSchema: required")
+	}
+	if _, ok := raw["type"]; raw != nil && !ok {
+		return fmt.Errorf("field type in ElicitRequestParamsRequestedSchema: required")
+	}
+	type Plain ElicitRequestParamsRequestedSchema
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	*j = ElicitRequestParamsRequestedSchema(plain)
+	return nil
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *ElicitRequestParams) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["message"]; raw != nil && !ok {
+		return fmt.Errorf("field message in ElicitRequestParams: required")
+	}
+	if _, ok := raw["requestedSchema"]; raw != nil && !ok {
+		return fmt.Errorf("field requestedSchema in ElicitRequestParams: required")
+	}
+	type Plain ElicitRequestParams
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	*j = ElicitRequestParams(plain)
+	return nil
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *ElicitRequest) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["method"]; raw != nil && !ok {
+		return fmt.Errorf("field method in ElicitRequest: required")
+	}
+	if _, ok := raw["params"]; raw != nil && !ok {
+		return fmt.Errorf("field params in ElicitRequest: required")
+	}
+	type Plain ElicitRequest
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	*j = ElicitRequest(plain)
+	return nil
+}
+
+// The client's response to an elicitation request.
+type ElicitResult struct {
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+
+	// The user action in response to the elicitation.
+	// - "accept": User submitted the form/confirmed the action
+	// - "decline": User explicitly declined the action
+	// - "cancel": User dismissed without making an explicit choice
+	Action ElicitResultAction `json:"action" yaml:"action" mapstructure:"action"`
+
+	// The submitted form data, only present when action is "accept".
+	// Contains values matching the requested schema.
+	Content map[string]interface{} `json:"content,omitempty" yaml:"content,omitempty" mapstructure:"content,omitempty"`
+}
+
+type ElicitResultAction string
+
+const ElicitResultActionAccept ElicitResultAction = "accept"
+const ElicitResultActionCancel ElicitResultAction = "cancel"
+const ElicitResultActionDecline ElicitResultAction = "decline"
+
+var enumValues_ElicitResultAction = []interface{}{
+	"accept",
+	"cancel",
+	"decline",
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *ElicitResultAction) UnmarshalJSON(value []byte) error {
+	var v string
+	if err := json.Unmarshal(value, &v); err != nil {
+		return err
+	}
+	var ok bool
+	for _, expected := range enumValues_ElicitResultAction {
+		if reflect.DeepEqual(v, expected) {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return fmt.Errorf("invalid value (expected one of %#v): %#v", enumValues_ElicitResultAction, v)
+	}
+	*j = ElicitResultAction(v)
+	return nil
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *ElicitResult) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["action"]; raw != nil && !ok {
+		return fmt.Errorf("field action in ElicitResult: required")
+	}
+	type Plain ElicitResult
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	*j = ElicitResult(plain)
+	return nil
+}
+
+// The contents of a resource, embedded into a prompt or tool call result.
+//
+// It is up to the client how best to render embedded resources for the benefit
+// of the LLM and/or the user.
+type EmbeddedResource struct {
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+
+	// Optional annotations for the client.
+	Annotations *Annotations `json:"annotations,omitempty" yaml:"annotations,omitempty" mapstructure:"annotations,omitempty"`
+
+	// Resource corresponds to the JSON schema field "resource".
+	Resource EmbeddedResourceResource `json:"resource" yaml:"resource" mapstructure:"resource"`
+
+	// Type corresponds to the JSON schema field "type".
+	Type string `json:"type" yaml:"type" mapstructure:"type"`
+}
+
+type EmbeddedResourceResource struct {
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+
+	// A base64-encoded string representing the binary data of the item.
+	Blob string `json:"blob" yaml:"blob" mapstructure:"blob"`
+
+	// The MIME type of this resource, if known.
+	MimeType *string `json:"mimeType,omitempty" yaml:"mimeType,omitempty" mapstructure:"mimeType,omitempty"`
+
+	// The text of the item. This must only be set if the item can actually be
+	// represented as text (not binary data).
+	Text string `json:"text" yaml:"text" mapstructure:"text"`
+
+	// The URI of this resource.
+	Uri string `json:"uri" yaml:"uri" mapstructure:"uri"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *EmbeddedResourceResource) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	var embeddedResourceResource_0 EmbeddedResourceResource_0
+	var embeddedResourceResource_1 EmbeddedResourceResource_1
+	var errs []error
+	if err := embeddedResourceResource_0.UnmarshalJSON(value); err != nil {
+		errs = append(errs, err)
+	}
+	if err := embeddedResourceResource_1.UnmarshalJSON(value); err != nil {
+		errs = append(errs, err)
+	}
+	if len(errs) == 2 {
+		return fmt.Errorf("all validators failed: %s", errors.Join(errs...))
+	}
+	type Plain EmbeddedResourceResource
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	*j = EmbeddedResourceResource(plain)
+	return nil
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *EmbeddedResource) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["resource"]; raw != nil && !ok {
@@ -673,10 +1068,48 @@ func (j *EmbeddedResource) UnmarshalJSON(b []byte) error {
 	}
 	type Plain EmbeddedResource
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = EmbeddedResource(plain)
+	return nil
+}
+
+type EnumSchema struct {
+	// Description corresponds to the JSON schema field "description".
+	Description *string `json:"description,omitempty" yaml:"description,omitempty" mapstructure:"description,omitempty"`
+
+	// Enum corresponds to the JSON schema field "enum".
+	Enum []string `json:"enum" yaml:"enum" mapstructure:"enum"`
+
+	// EnumNames corresponds to the JSON schema field "enumNames".
+	EnumNames []string `json:"enumNames,omitempty" yaml:"enumNames,omitempty" mapstructure:"enumNames,omitempty"`
+
+	// Title corresponds to the JSON schema field "title".
+	Title *string `json:"title,omitempty" yaml:"title,omitempty" mapstructure:"title,omitempty"`
+
+	// Type corresponds to the JSON schema field "type".
+	Type string `json:"type" yaml:"type" mapstructure:"type"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *EnumSchema) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["enum"]; raw != nil && !ok {
+		return fmt.Errorf("field enum in EnumSchema: required")
+	}
+	if _, ok := raw["type"]; raw != nil && !ok {
+		return fmt.Errorf("field type in EnumSchema: required")
+	}
+	type Plain EnumSchema
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	*j = EnumSchema(plain)
 	return nil
 }
 
@@ -691,19 +1124,16 @@ type GetPromptRequest struct {
 
 type GetPromptRequestParams struct {
 	// Arguments to use for templating the prompt.
-	Arguments GetPromptRequestParamsArguments `json:"arguments,omitempty" yaml:"arguments,omitempty" mapstructure:"arguments,omitempty"`
+	Arguments map[string]string `json:"arguments,omitempty" yaml:"arguments,omitempty" mapstructure:"arguments,omitempty"`
 
 	// The name of the prompt or prompt template.
 	Name string `json:"name" yaml:"name" mapstructure:"name"`
 }
 
-// Arguments to use for templating the prompt.
-type GetPromptRequestParamsArguments map[string]string
-
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *GetPromptRequestParams) UnmarshalJSON(b []byte) error {
+func (j *GetPromptRequestParams) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["name"]; raw != nil && !ok {
@@ -711,7 +1141,7 @@ func (j *GetPromptRequestParams) UnmarshalJSON(b []byte) error {
 	}
 	type Plain GetPromptRequestParams
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = GetPromptRequestParams(plain)
@@ -719,9 +1149,9 @@ func (j *GetPromptRequestParams) UnmarshalJSON(b []byte) error {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *GetPromptRequest) UnmarshalJSON(b []byte) error {
+func (j *GetPromptRequest) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -732,7 +1162,7 @@ func (j *GetPromptRequest) UnmarshalJSON(b []byte) error {
 	}
 	type Plain GetPromptRequest
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = GetPromptRequest(plain)
@@ -741,9 +1171,9 @@ func (j *GetPromptRequest) UnmarshalJSON(b []byte) error {
 
 // The server's response to a prompts/get request from the client.
 type GetPromptResult struct {
-	// This result property is reserved by the protocol to allow clients and servers
-	// to attach additional metadata to their responses.
-	Meta GetPromptResultMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
 	// An optional description for the prompt.
 	Description *string `json:"description,omitempty" yaml:"description,omitempty" mapstructure:"description,omitempty"`
@@ -752,14 +1182,10 @@ type GetPromptResult struct {
 	Messages []PromptMessage `json:"messages" yaml:"messages" mapstructure:"messages"`
 }
 
-// This result property is reserved by the protocol to allow clients and servers to
-// attach additional metadata to their responses.
-type GetPromptResultMeta map[string]interface{}
-
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *GetPromptResult) UnmarshalJSON(b []byte) error {
+func (j *GetPromptResult) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["messages"]; raw != nil && !ok {
@@ -767,7 +1193,7 @@ func (j *GetPromptResult) UnmarshalJSON(b []byte) error {
 	}
 	type Plain GetPromptResult
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = GetPromptResult(plain)
@@ -776,6 +1202,10 @@ func (j *GetPromptResult) UnmarshalJSON(b []byte) error {
 
 // An image provided to or from an LLM.
 type ImageContent struct {
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+
 	// Optional annotations for the client.
 	Annotations *Annotations `json:"annotations,omitempty" yaml:"annotations,omitempty" mapstructure:"annotations,omitempty"`
 
@@ -791,9 +1221,9 @@ type ImageContent struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *ImageContent) UnmarshalJSON(b []byte) error {
+func (j *ImageContent) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["data"]; raw != nil && !ok {
@@ -807,26 +1237,37 @@ func (j *ImageContent) UnmarshalJSON(b []byte) error {
 	}
 	type Plain ImageContent
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = ImageContent(plain)
 	return nil
 }
 
-// Describes the name and version of an MCP implementation.
+// Describes the name and version of an MCP implementation, with an optional title
+// for UI representation.
 type Implementation struct {
-	// Name corresponds to the JSON schema field "name".
+	// Intended for programmatic or logical use, but used as a display name in past
+	// specs or fallback (if title isn't present).
 	Name string `json:"name" yaml:"name" mapstructure:"name"`
+
+	// Intended for UI and end-user contexts — optimized to be human-readable and
+	// easily understood,
+	// even by those unfamiliar with domain-specific terminology.
+	//
+	// If not provided, the name should be used for display (except for Tool,
+	// where `annotations.title` should be given precedence over using `name`,
+	// if present).
+	Title *string `json:"title,omitempty" yaml:"title,omitempty" mapstructure:"title,omitempty"`
 
 	// Version corresponds to the JSON schema field "version".
 	Version string `json:"version" yaml:"version" mapstructure:"version"`
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *Implementation) UnmarshalJSON(b []byte) error {
+func (j *Implementation) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["name"]; raw != nil && !ok {
@@ -837,7 +1278,7 @@ func (j *Implementation) UnmarshalJSON(b []byte) error {
 	}
 	type Plain Implementation
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = Implementation(plain)
@@ -867,9 +1308,9 @@ type InitializeRequestParams struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *InitializeRequestParams) UnmarshalJSON(b []byte) error {
+func (j *InitializeRequestParams) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["capabilities"]; raw != nil && !ok {
@@ -883,7 +1324,7 @@ func (j *InitializeRequestParams) UnmarshalJSON(b []byte) error {
 	}
 	type Plain InitializeRequestParams
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = InitializeRequestParams(plain)
@@ -891,9 +1332,9 @@ func (j *InitializeRequestParams) UnmarshalJSON(b []byte) error {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *InitializeRequest) UnmarshalJSON(b []byte) error {
+func (j *InitializeRequest) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -904,7 +1345,7 @@ func (j *InitializeRequest) UnmarshalJSON(b []byte) error {
 	}
 	type Plain InitializeRequest
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = InitializeRequest(plain)
@@ -914,9 +1355,9 @@ func (j *InitializeRequest) UnmarshalJSON(b []byte) error {
 // After receiving an initialize request from the client, the server sends this
 // response.
 type InitializeResult struct {
-	// This result property is reserved by the protocol to allow clients and servers
-	// to attach additional metadata to their responses.
-	Meta InitializeResultMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
 	// Capabilities corresponds to the JSON schema field "capabilities".
 	Capabilities ServerCapabilities `json:"capabilities" yaml:"capabilities" mapstructure:"capabilities"`
@@ -937,14 +1378,10 @@ type InitializeResult struct {
 	ServerInfo Implementation `json:"serverInfo" yaml:"serverInfo" mapstructure:"serverInfo"`
 }
 
-// This result property is reserved by the protocol to allow clients and servers to
-// attach additional metadata to their responses.
-type InitializeResultMeta map[string]interface{}
-
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *InitializeResult) UnmarshalJSON(b []byte) error {
+func (j *InitializeResult) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["capabilities"]; raw != nil && !ok {
@@ -958,7 +1395,7 @@ func (j *InitializeResult) UnmarshalJSON(b []byte) error {
 	}
 	type Plain InitializeResult
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = InitializeResult(plain)
@@ -976,21 +1413,17 @@ type InitializedNotification struct {
 }
 
 type InitializedNotificationParams struct {
-	// This parameter name is reserved by MCP to allow clients and servers to attach
-	// additional metadata to their notifications.
-	Meta InitializedNotificationParamsMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
 	AdditionalProperties interface{} `mapstructure:",remain"`
 }
 
-// This parameter name is reserved by MCP to allow clients and servers to attach
-// additional metadata to their notifications.
-type InitializedNotificationParamsMeta map[string]interface{}
-
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *InitializedNotification) UnmarshalJSON(b []byte) error {
+func (j *InitializedNotification) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -998,20 +1431,12 @@ func (j *InitializedNotification) UnmarshalJSON(b []byte) error {
 	}
 	type Plain InitializedNotification
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = InitializedNotification(plain)
 	return nil
 }
-
-// A JSON-RPC batch request, as described in
-// https://www.jsonrpc.org/specification#batch.
-type JSONRPCBatchRequest []interface{}
-
-// A JSON-RPC batch response, as described in
-// https://www.jsonrpc.org/specification#batch.
-type JSONRPCBatchResponse []interface{}
 
 // A response to a request that indicates an error occurred.
 type JSONRPCError struct {
@@ -1039,9 +1464,9 @@ type JSONRPCErrorError struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *JSONRPCErrorError) UnmarshalJSON(b []byte) error {
+func (j *JSONRPCErrorError) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["code"]; raw != nil && !ok {
@@ -1052,7 +1477,7 @@ func (j *JSONRPCErrorError) UnmarshalJSON(b []byte) error {
 	}
 	type Plain JSONRPCErrorError
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = JSONRPCErrorError(plain)
@@ -1060,9 +1485,9 @@ func (j *JSONRPCErrorError) UnmarshalJSON(b []byte) error {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *JSONRPCError) UnmarshalJSON(b []byte) error {
+func (j *JSONRPCError) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["error"]; raw != nil && !ok {
@@ -1076,7 +1501,7 @@ func (j *JSONRPCError) UnmarshalJSON(b []byte) error {
 	}
 	type Plain JSONRPCError
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = JSONRPCError(plain)
@@ -1100,21 +1525,17 @@ type JSONRPCNotification struct {
 }
 
 type JSONRPCNotificationParams struct {
-	// This parameter name is reserved by MCP to allow clients and servers to attach
-	// additional metadata to their notifications.
-	Meta JSONRPCNotificationParamsMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
 	AdditionalProperties interface{} `mapstructure:",remain"`
 }
 
-// This parameter name is reserved by MCP to allow clients and servers to attach
-// additional metadata to their notifications.
-type JSONRPCNotificationParamsMeta map[string]interface{}
-
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *JSONRPCNotification) UnmarshalJSON(b []byte) error {
+func (j *JSONRPCNotification) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["jsonrpc"]; raw != nil && !ok {
@@ -1125,7 +1546,7 @@ func (j *JSONRPCNotification) UnmarshalJSON(b []byte) error {
 	}
 	type Plain JSONRPCNotification
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = JSONRPCNotification(plain)
@@ -1148,24 +1569,29 @@ type JSONRPCRequest struct {
 }
 
 type JSONRPCRequestParams struct {
-	// Meta corresponds to the JSON schema field "_meta".
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
 	Meta *JSONRPCRequestParamsMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
 	AdditionalProperties interface{} `mapstructure:",remain"`
 }
 
+// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+// usage.
 type JSONRPCRequestParamsMeta struct {
 	// If specified, the caller is requesting out-of-band progress notifications for
 	// this request (as represented by notifications/progress). The value of this
 	// parameter is an opaque token that will be attached to any subsequent
 	// notifications. The receiver is not obligated to provide these notifications.
 	ProgressToken *ProgressToken `json:"progressToken,omitempty" yaml:"progressToken,omitempty" mapstructure:"progressToken,omitempty"`
+
+	AdditionalProperties interface{} `mapstructure:",remain"`
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *JSONRPCRequest) UnmarshalJSON(b []byte) error {
+func (j *JSONRPCRequest) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["id"]; raw != nil && !ok {
@@ -1179,7 +1605,7 @@ func (j *JSONRPCRequest) UnmarshalJSON(b []byte) error {
 	}
 	type Plain JSONRPCRequest
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = JSONRPCRequest(plain)
@@ -1199,9 +1625,9 @@ type JSONRPCResponse struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *JSONRPCResponse) UnmarshalJSON(b []byte) error {
+func (j *JSONRPCResponse) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["id"]; raw != nil && !ok {
@@ -1215,7 +1641,7 @@ func (j *JSONRPCResponse) UnmarshalJSON(b []byte) error {
 	}
 	type Plain JSONRPCResponse
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = JSONRPCResponse(plain)
@@ -1239,9 +1665,9 @@ type ListPromptsRequestParams struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *ListPromptsRequest) UnmarshalJSON(b []byte) error {
+func (j *ListPromptsRequest) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -1249,7 +1675,7 @@ func (j *ListPromptsRequest) UnmarshalJSON(b []byte) error {
 	}
 	type Plain ListPromptsRequest
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = ListPromptsRequest(plain)
@@ -1258,9 +1684,9 @@ func (j *ListPromptsRequest) UnmarshalJSON(b []byte) error {
 
 // The server's response to a prompts/list request from the client.
 type ListPromptsResult struct {
-	// This result property is reserved by the protocol to allow clients and servers
-	// to attach additional metadata to their responses.
-	Meta ListPromptsResultMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
 	// An opaque token representing the pagination position after the last returned
 	// result.
@@ -1271,14 +1697,10 @@ type ListPromptsResult struct {
 	Prompts []Prompt `json:"prompts" yaml:"prompts" mapstructure:"prompts"`
 }
 
-// This result property is reserved by the protocol to allow clients and servers to
-// attach additional metadata to their responses.
-type ListPromptsResultMeta map[string]interface{}
-
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *ListPromptsResult) UnmarshalJSON(b []byte) error {
+func (j *ListPromptsResult) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["prompts"]; raw != nil && !ok {
@@ -1286,7 +1708,7 @@ func (j *ListPromptsResult) UnmarshalJSON(b []byte) error {
 	}
 	type Plain ListPromptsResult
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = ListPromptsResult(plain)
@@ -1309,9 +1731,9 @@ type ListResourceTemplatesRequestParams struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *ListResourceTemplatesRequest) UnmarshalJSON(b []byte) error {
+func (j *ListResourceTemplatesRequest) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -1319,7 +1741,7 @@ func (j *ListResourceTemplatesRequest) UnmarshalJSON(b []byte) error {
 	}
 	type Plain ListResourceTemplatesRequest
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = ListResourceTemplatesRequest(plain)
@@ -1328,9 +1750,9 @@ func (j *ListResourceTemplatesRequest) UnmarshalJSON(b []byte) error {
 
 // The server's response to a resources/templates/list request from the client.
 type ListResourceTemplatesResult struct {
-	// This result property is reserved by the protocol to allow clients and servers
-	// to attach additional metadata to their responses.
-	Meta ListResourceTemplatesResultMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
 	// An opaque token representing the pagination position after the last returned
 	// result.
@@ -1341,14 +1763,10 @@ type ListResourceTemplatesResult struct {
 	ResourceTemplates []ResourceTemplate `json:"resourceTemplates" yaml:"resourceTemplates" mapstructure:"resourceTemplates"`
 }
 
-// This result property is reserved by the protocol to allow clients and servers to
-// attach additional metadata to their responses.
-type ListResourceTemplatesResultMeta map[string]interface{}
-
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *ListResourceTemplatesResult) UnmarshalJSON(b []byte) error {
+func (j *ListResourceTemplatesResult) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["resourceTemplates"]; raw != nil && !ok {
@@ -1356,7 +1774,7 @@ func (j *ListResourceTemplatesResult) UnmarshalJSON(b []byte) error {
 	}
 	type Plain ListResourceTemplatesResult
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = ListResourceTemplatesResult(plain)
@@ -1379,9 +1797,9 @@ type ListResourcesRequestParams struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *ListResourcesRequest) UnmarshalJSON(b []byte) error {
+func (j *ListResourcesRequest) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -1389,7 +1807,7 @@ func (j *ListResourcesRequest) UnmarshalJSON(b []byte) error {
 	}
 	type Plain ListResourcesRequest
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = ListResourcesRequest(plain)
@@ -1398,9 +1816,9 @@ func (j *ListResourcesRequest) UnmarshalJSON(b []byte) error {
 
 // The server's response to a resources/list request from the client.
 type ListResourcesResult struct {
-	// This result property is reserved by the protocol to allow clients and servers
-	// to attach additional metadata to their responses.
-	Meta ListResourcesResultMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
 	// An opaque token representing the pagination position after the last returned
 	// result.
@@ -1411,14 +1829,10 @@ type ListResourcesResult struct {
 	Resources []Resource `json:"resources" yaml:"resources" mapstructure:"resources"`
 }
 
-// This result property is reserved by the protocol to allow clients and servers to
-// attach additional metadata to their responses.
-type ListResourcesResultMeta map[string]interface{}
-
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *ListResourcesResult) UnmarshalJSON(b []byte) error {
+func (j *ListResourcesResult) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["resources"]; raw != nil && !ok {
@@ -1426,7 +1840,7 @@ func (j *ListResourcesResult) UnmarshalJSON(b []byte) error {
 	}
 	type Plain ListResourcesResult
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = ListResourcesResult(plain)
@@ -1452,24 +1866,29 @@ type ListRootsRequest struct {
 }
 
 type ListRootsRequestParams struct {
-	// Meta corresponds to the JSON schema field "_meta".
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
 	Meta *ListRootsRequestParamsMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
 	AdditionalProperties interface{} `mapstructure:",remain"`
 }
 
+// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+// usage.
 type ListRootsRequestParamsMeta struct {
 	// If specified, the caller is requesting out-of-band progress notifications for
 	// this request (as represented by notifications/progress). The value of this
 	// parameter is an opaque token that will be attached to any subsequent
 	// notifications. The receiver is not obligated to provide these notifications.
 	ProgressToken *ProgressToken `json:"progressToken,omitempty" yaml:"progressToken,omitempty" mapstructure:"progressToken,omitempty"`
+
+	AdditionalProperties interface{} `mapstructure:",remain"`
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *ListRootsRequest) UnmarshalJSON(b []byte) error {
+func (j *ListRootsRequest) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -1477,7 +1896,7 @@ func (j *ListRootsRequest) UnmarshalJSON(b []byte) error {
 	}
 	type Plain ListRootsRequest
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = ListRootsRequest(plain)
@@ -1489,22 +1908,18 @@ func (j *ListRootsRequest) UnmarshalJSON(b []byte) error {
 // directory
 // or file that the server can operate on.
 type ListRootsResult struct {
-	// This result property is reserved by the protocol to allow clients and servers
-	// to attach additional metadata to their responses.
-	Meta ListRootsResultMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
 	// Roots corresponds to the JSON schema field "roots".
 	Roots []Root `json:"roots" yaml:"roots" mapstructure:"roots"`
 }
 
-// This result property is reserved by the protocol to allow clients and servers to
-// attach additional metadata to their responses.
-type ListRootsResultMeta map[string]interface{}
-
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *ListRootsResult) UnmarshalJSON(b []byte) error {
+func (j *ListRootsResult) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["roots"]; raw != nil && !ok {
@@ -1512,7 +1927,7 @@ func (j *ListRootsResult) UnmarshalJSON(b []byte) error {
 	}
 	type Plain ListRootsResult
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = ListRootsResult(plain)
@@ -1535,9 +1950,9 @@ type ListToolsRequestParams struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *ListToolsRequest) UnmarshalJSON(b []byte) error {
+func (j *ListToolsRequest) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -1545,7 +1960,7 @@ func (j *ListToolsRequest) UnmarshalJSON(b []byte) error {
 	}
 	type Plain ListToolsRequest
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = ListToolsRequest(plain)
@@ -1554,9 +1969,9 @@ func (j *ListToolsRequest) UnmarshalJSON(b []byte) error {
 
 // The server's response to a tools/list request from the client.
 type ListToolsResult struct {
-	// This result property is reserved by the protocol to allow clients and servers
-	// to attach additional metadata to their responses.
-	Meta ListToolsResultMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
 	// An opaque token representing the pagination position after the last returned
 	// result.
@@ -1567,14 +1982,10 @@ type ListToolsResult struct {
 	Tools []Tool `json:"tools" yaml:"tools" mapstructure:"tools"`
 }
 
-// This result property is reserved by the protocol to allow clients and servers to
-// attach additional metadata to their responses.
-type ListToolsResultMeta map[string]interface{}
-
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *ListToolsResult) UnmarshalJSON(b []byte) error {
+func (j *ListToolsResult) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["tools"]; raw != nil && !ok {
@@ -1582,7 +1993,7 @@ func (j *ListToolsResult) UnmarshalJSON(b []byte) error {
 	}
 	type Plain ListToolsResult
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = ListToolsResult(plain)
@@ -1612,9 +2023,9 @@ var enumValues_LoggingLevel = []interface{}{
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *LoggingLevel) UnmarshalJSON(b []byte) error {
+func (j *LoggingLevel) UnmarshalJSON(value []byte) error {
 	var v string
-	if err := json.Unmarshal(b, &v); err != nil {
+	if err := json.Unmarshal(value, &v); err != nil {
 		return err
 	}
 	var ok bool
@@ -1655,9 +2066,9 @@ type LoggingMessageNotificationParams struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *LoggingMessageNotificationParams) UnmarshalJSON(b []byte) error {
+func (j *LoggingMessageNotificationParams) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["data"]; raw != nil && !ok {
@@ -1668,7 +2079,7 @@ func (j *LoggingMessageNotificationParams) UnmarshalJSON(b []byte) error {
 	}
 	type Plain LoggingMessageNotificationParams
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = LoggingMessageNotificationParams(plain)
@@ -1676,9 +2087,9 @@ func (j *LoggingMessageNotificationParams) UnmarshalJSON(b []byte) error {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *LoggingMessageNotification) UnmarshalJSON(b []byte) error {
+func (j *LoggingMessageNotification) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -1689,7 +2100,7 @@ func (j *LoggingMessageNotification) UnmarshalJSON(b []byte) error {
 	}
 	type Plain LoggingMessageNotification
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = LoggingMessageNotification(plain)
@@ -1754,10 +2165,10 @@ type ModelPreferences struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *ModelPreferences) UnmarshalJSON(b []byte) error {
+func (j *ModelPreferences) UnmarshalJSON(value []byte) error {
 	type Plain ModelPreferences
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	if plain.CostPriority != nil && 1 < *plain.CostPriority {
@@ -1791,21 +2202,17 @@ type Notification struct {
 }
 
 type NotificationParams struct {
-	// This parameter name is reserved by MCP to allow clients and servers to attach
-	// additional metadata to their notifications.
-	Meta NotificationParamsMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
 	AdditionalProperties interface{} `mapstructure:",remain"`
 }
 
-// This parameter name is reserved by MCP to allow clients and servers to attach
-// additional metadata to their notifications.
-type NotificationParamsMeta map[string]interface{}
-
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *Notification) UnmarshalJSON(b []byte) error {
+func (j *Notification) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -1813,10 +2220,75 @@ func (j *Notification) UnmarshalJSON(b []byte) error {
 	}
 	type Plain Notification
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = Notification(plain)
+	return nil
+}
+
+type NumberSchema struct {
+	// Description corresponds to the JSON schema field "description".
+	Description *string `json:"description,omitempty" yaml:"description,omitempty" mapstructure:"description,omitempty"`
+
+	// Maximum corresponds to the JSON schema field "maximum".
+	Maximum *int `json:"maximum,omitempty" yaml:"maximum,omitempty" mapstructure:"maximum,omitempty"`
+
+	// Minimum corresponds to the JSON schema field "minimum".
+	Minimum *int `json:"minimum,omitempty" yaml:"minimum,omitempty" mapstructure:"minimum,omitempty"`
+
+	// Title corresponds to the JSON schema field "title".
+	Title *string `json:"title,omitempty" yaml:"title,omitempty" mapstructure:"title,omitempty"`
+
+	// Type corresponds to the JSON schema field "type".
+	Type NumberSchemaType `json:"type" yaml:"type" mapstructure:"type"`
+}
+
+type NumberSchemaType string
+
+const NumberSchemaTypeInteger NumberSchemaType = "integer"
+const NumberSchemaTypeNumber NumberSchemaType = "number"
+
+var enumValues_NumberSchemaType = []interface{}{
+	"integer",
+	"number",
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *NumberSchemaType) UnmarshalJSON(value []byte) error {
+	var v string
+	if err := json.Unmarshal(value, &v); err != nil {
+		return err
+	}
+	var ok bool
+	for _, expected := range enumValues_NumberSchemaType {
+		if reflect.DeepEqual(v, expected) {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return fmt.Errorf("invalid value (expected one of %#v): %#v", enumValues_NumberSchemaType, v)
+	}
+	*j = NumberSchemaType(v)
+	return nil
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *NumberSchema) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["type"]; raw != nil && !ok {
+		return fmt.Errorf("field type in NumberSchema: required")
+	}
+	type Plain NumberSchema
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	*j = NumberSchema(plain)
 	return nil
 }
 
@@ -1835,9 +2307,9 @@ type PaginatedRequestParams struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *PaginatedRequest) UnmarshalJSON(b []byte) error {
+func (j *PaginatedRequest) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -1845,7 +2317,7 @@ func (j *PaginatedRequest) UnmarshalJSON(b []byte) error {
 	}
 	type Plain PaginatedRequest
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = PaginatedRequest(plain)
@@ -1853,19 +2325,15 @@ func (j *PaginatedRequest) UnmarshalJSON(b []byte) error {
 }
 
 type PaginatedResult struct {
-	// This result property is reserved by the protocol to allow clients and servers
-	// to attach additional metadata to their responses.
-	Meta PaginatedResultMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
 	// An opaque token representing the pagination position after the last returned
 	// result.
 	// If present, there may be more results available.
 	NextCursor *string `json:"nextCursor,omitempty" yaml:"nextCursor,omitempty" mapstructure:"nextCursor,omitempty"`
 }
-
-// This result property is reserved by the protocol to allow clients and servers to
-// attach additional metadata to their responses.
-type PaginatedResultMeta map[string]interface{}
 
 // A ping, issued by either the server or the client, to check that the other party
 // is still alive. The receiver must promptly respond, or else may be disconnected.
@@ -1878,24 +2346,29 @@ type PingRequest struct {
 }
 
 type PingRequestParams struct {
-	// Meta corresponds to the JSON schema field "_meta".
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
 	Meta *PingRequestParamsMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
 	AdditionalProperties interface{} `mapstructure:",remain"`
 }
 
+// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+// usage.
 type PingRequestParamsMeta struct {
 	// If specified, the caller is requesting out-of-band progress notifications for
 	// this request (as represented by notifications/progress). The value of this
 	// parameter is an opaque token that will be attached to any subsequent
 	// notifications. The receiver is not obligated to provide these notifications.
 	ProgressToken *ProgressToken `json:"progressToken,omitempty" yaml:"progressToken,omitempty" mapstructure:"progressToken,omitempty"`
+
+	AdditionalProperties interface{} `mapstructure:",remain"`
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *PingRequest) UnmarshalJSON(b []byte) error {
+func (j *PingRequest) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -1903,12 +2376,16 @@ func (j *PingRequest) UnmarshalJSON(b []byte) error {
 	}
 	type Plain PingRequest
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = PingRequest(plain)
 	return nil
 }
+
+// Restricted schema definitions that only allow primitive types
+// without nested objects or arrays.
+type PrimitiveSchemaDefinition interface{}
 
 // An out-of-band notification used to inform the receiver of a progress update for
 // a long-running request.
@@ -1937,9 +2414,9 @@ type ProgressNotificationParams struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *ProgressNotificationParams) UnmarshalJSON(b []byte) error {
+func (j *ProgressNotificationParams) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["progress"]; raw != nil && !ok {
@@ -1950,7 +2427,7 @@ func (j *ProgressNotificationParams) UnmarshalJSON(b []byte) error {
 	}
 	type Plain ProgressNotificationParams
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = ProgressNotificationParams(plain)
@@ -1958,9 +2435,9 @@ func (j *ProgressNotificationParams) UnmarshalJSON(b []byte) error {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *ProgressNotification) UnmarshalJSON(b []byte) error {
+func (j *ProgressNotification) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -1971,7 +2448,7 @@ func (j *ProgressNotification) UnmarshalJSON(b []byte) error {
 	}
 	type Plain ProgressNotification
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = ProgressNotification(plain)
@@ -1984,14 +2461,28 @@ type ProgressToken int
 
 // A prompt or prompt template that the server offers.
 type Prompt struct {
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+
 	// A list of arguments to use for templating the prompt.
 	Arguments []PromptArgument `json:"arguments,omitempty" yaml:"arguments,omitempty" mapstructure:"arguments,omitempty"`
 
 	// An optional description of what this prompt provides
 	Description *string `json:"description,omitempty" yaml:"description,omitempty" mapstructure:"description,omitempty"`
 
-	// The name of the prompt or prompt template.
+	// Intended for programmatic or logical use, but used as a display name in past
+	// specs or fallback (if title isn't present).
 	Name string `json:"name" yaml:"name" mapstructure:"name"`
+
+	// Intended for UI and end-user contexts — optimized to be human-readable and
+	// easily understood,
+	// even by those unfamiliar with domain-specific terminology.
+	//
+	// If not provided, the name should be used for display (except for Tool,
+	// where `annotations.title` should be given precedence over using `name`,
+	// if present).
+	Title *string `json:"title,omitempty" yaml:"title,omitempty" mapstructure:"title,omitempty"`
 }
 
 // Describes an argument that a prompt can accept.
@@ -1999,17 +2490,27 @@ type PromptArgument struct {
 	// A human-readable description of the argument.
 	Description *string `json:"description,omitempty" yaml:"description,omitempty" mapstructure:"description,omitempty"`
 
-	// The name of the argument.
+	// Intended for programmatic or logical use, but used as a display name in past
+	// specs or fallback (if title isn't present).
 	Name string `json:"name" yaml:"name" mapstructure:"name"`
 
 	// Whether this argument must be provided.
 	Required *bool `json:"required,omitempty" yaml:"required,omitempty" mapstructure:"required,omitempty"`
+
+	// Intended for UI and end-user contexts — optimized to be human-readable and
+	// easily understood,
+	// even by those unfamiliar with domain-specific terminology.
+	//
+	// If not provided, the name should be used for display (except for Tool,
+	// where `annotations.title` should be given precedence over using `name`,
+	// if present).
+	Title *string `json:"title,omitempty" yaml:"title,omitempty" mapstructure:"title,omitempty"`
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *PromptArgument) UnmarshalJSON(b []byte) error {
+func (j *PromptArgument) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["name"]; raw != nil && !ok {
@@ -2017,7 +2518,7 @@ func (j *PromptArgument) UnmarshalJSON(b []byte) error {
 	}
 	type Plain PromptArgument
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = PromptArgument(plain)
@@ -2036,21 +2537,17 @@ type PromptListChangedNotification struct {
 }
 
 type PromptListChangedNotificationParams struct {
-	// This parameter name is reserved by MCP to allow clients and servers to attach
-	// additional metadata to their notifications.
-	Meta PromptListChangedNotificationParamsMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
 	AdditionalProperties interface{} `mapstructure:",remain"`
 }
 
-// This parameter name is reserved by MCP to allow clients and servers to attach
-// additional metadata to their notifications.
-type PromptListChangedNotificationParamsMeta map[string]interface{}
-
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *PromptListChangedNotification) UnmarshalJSON(b []byte) error {
+func (j *PromptListChangedNotification) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -2058,7 +2555,7 @@ func (j *PromptListChangedNotification) UnmarshalJSON(b []byte) error {
 	}
 	type Plain PromptListChangedNotification
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = PromptListChangedNotification(plain)
@@ -2071,16 +2568,18 @@ func (j *PromptListChangedNotification) UnmarshalJSON(b []byte) error {
 // resources from the MCP server.
 type PromptMessage struct {
 	// Content corresponds to the JSON schema field "content".
-	Content interface{} `json:"content" yaml:"content" mapstructure:"content"`
+	Content PromptMessageContent `json:"content" yaml:"content" mapstructure:"content"`
 
 	// Role corresponds to the JSON schema field "role".
 	Role Role `json:"role" yaml:"role" mapstructure:"role"`
 }
 
+type PromptMessageContent interface{}
+
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *PromptMessage) UnmarshalJSON(b []byte) error {
+func (j *PromptMessage) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["content"]; raw != nil && !ok {
@@ -2091,7 +2590,7 @@ func (j *PromptMessage) UnmarshalJSON(b []byte) error {
 	}
 	type Plain PromptMessage
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = PromptMessage(plain)
@@ -2100,17 +2599,27 @@ func (j *PromptMessage) UnmarshalJSON(b []byte) error {
 
 // Identifies a prompt.
 type PromptReference struct {
-	// The name of the prompt or prompt template
+	// Intended for programmatic or logical use, but used as a display name in past
+	// specs or fallback (if title isn't present).
 	Name string `json:"name" yaml:"name" mapstructure:"name"`
+
+	// Intended for UI and end-user contexts — optimized to be human-readable and
+	// easily understood,
+	// even by those unfamiliar with domain-specific terminology.
+	//
+	// If not provided, the name should be used for display (except for Tool,
+	// where `annotations.title` should be given precedence over using `name`,
+	// if present).
+	Title *string `json:"title,omitempty" yaml:"title,omitempty" mapstructure:"title,omitempty"`
 
 	// Type corresponds to the JSON schema field "type".
 	Type string `json:"type" yaml:"type" mapstructure:"type"`
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *PromptReference) UnmarshalJSON(b []byte) error {
+func (j *PromptReference) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["name"]; raw != nil && !ok {
@@ -2121,7 +2630,7 @@ func (j *PromptReference) UnmarshalJSON(b []byte) error {
 	}
 	type Plain PromptReference
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = PromptReference(plain)
@@ -2129,9 +2638,9 @@ func (j *PromptReference) UnmarshalJSON(b []byte) error {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *Prompt) UnmarshalJSON(b []byte) error {
+func (j *Prompt) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["name"]; raw != nil && !ok {
@@ -2139,7 +2648,7 @@ func (j *Prompt) UnmarshalJSON(b []byte) error {
 	}
 	type Plain Prompt
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = Prompt(plain)
@@ -2162,9 +2671,9 @@ type ReadResourceRequestParams struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *ReadResourceRequestParams) UnmarshalJSON(b []byte) error {
+func (j *ReadResourceRequestParams) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["uri"]; raw != nil && !ok {
@@ -2172,7 +2681,7 @@ func (j *ReadResourceRequestParams) UnmarshalJSON(b []byte) error {
 	}
 	type Plain ReadResourceRequestParams
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = ReadResourceRequestParams(plain)
@@ -2180,9 +2689,9 @@ func (j *ReadResourceRequestParams) UnmarshalJSON(b []byte) error {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *ReadResourceRequest) UnmarshalJSON(b []byte) error {
+func (j *ReadResourceRequest) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -2193,7 +2702,7 @@ func (j *ReadResourceRequest) UnmarshalJSON(b []byte) error {
 	}
 	type Plain ReadResourceRequest
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = ReadResourceRequest(plain)
@@ -2202,22 +2711,64 @@ func (j *ReadResourceRequest) UnmarshalJSON(b []byte) error {
 
 // The server's response to a resources/read request from the client.
 type ReadResourceResult struct {
-	// This result property is reserved by the protocol to allow clients and servers
-	// to attach additional metadata to their responses.
-	Meta ReadResourceResultMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
 	// Contents corresponds to the JSON schema field "contents".
-	Contents []interface{} `json:"contents" yaml:"contents" mapstructure:"contents"`
+	Contents []ReadResourceResultContentsElem `json:"contents" yaml:"contents" mapstructure:"contents"`
 }
 
-// This result property is reserved by the protocol to allow clients and servers to
-// attach additional metadata to their responses.
-type ReadResourceResultMeta map[string]interface{}
+type ReadResourceResultContentsElem struct {
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+
+	// A base64-encoded string representing the binary data of the item.
+	Blob string `json:"blob" yaml:"blob" mapstructure:"blob"`
+
+	// The MIME type of this resource, if known.
+	MimeType *string `json:"mimeType,omitempty" yaml:"mimeType,omitempty" mapstructure:"mimeType,omitempty"`
+
+	// The text of the item. This must only be set if the item can actually be
+	// represented as text (not binary data).
+	Text string `json:"text" yaml:"text" mapstructure:"text"`
+
+	// The URI of this resource.
+	Uri string `json:"uri" yaml:"uri" mapstructure:"uri"`
+}
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *ReadResourceResult) UnmarshalJSON(b []byte) error {
+func (j *ReadResourceResultContentsElem) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	var readResourceResultContentsElem_0 ReadResourceResultContentsElem_0
+	var readResourceResultContentsElem_1 ReadResourceResultContentsElem_1
+	var errs []error
+	if err := readResourceResultContentsElem_0.UnmarshalJSON(value); err != nil {
+		errs = append(errs, err)
+	}
+	if err := readResourceResultContentsElem_1.UnmarshalJSON(value); err != nil {
+		errs = append(errs, err)
+	}
+	if len(errs) == 2 {
+		return fmt.Errorf("all validators failed: %s", errors.Join(errs...))
+	}
+	type Plain ReadResourceResultContentsElem
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	*j = ReadResourceResultContentsElem(plain)
+	return nil
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *ReadResourceResult) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["contents"]; raw != nil && !ok {
@@ -2225,7 +2776,7 @@ func (j *ReadResourceResult) UnmarshalJSON(b []byte) error {
 	}
 	type Plain ReadResourceResult
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = ReadResourceResult(plain)
@@ -2244,24 +2795,29 @@ type Request struct {
 type RequestId int
 
 type RequestParams struct {
-	// Meta corresponds to the JSON schema field "_meta".
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
 	Meta *RequestParamsMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
 	AdditionalProperties interface{} `mapstructure:",remain"`
 }
 
+// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+// usage.
 type RequestParamsMeta struct {
 	// If specified, the caller is requesting out-of-band progress notifications for
 	// this request (as represented by notifications/progress). The value of this
 	// parameter is an opaque token that will be attached to any subsequent
 	// notifications. The receiver is not obligated to provide these notifications.
 	ProgressToken *ProgressToken `json:"progressToken,omitempty" yaml:"progressToken,omitempty" mapstructure:"progressToken,omitempty"`
+
+	AdditionalProperties interface{} `mapstructure:",remain"`
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *Request) UnmarshalJSON(b []byte) error {
+func (j *Request) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -2269,7 +2825,7 @@ func (j *Request) UnmarshalJSON(b []byte) error {
 	}
 	type Plain Request
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = Request(plain)
@@ -2278,6 +2834,10 @@ func (j *Request) UnmarshalJSON(b []byte) error {
 
 // A known resource that the server is capable of reading.
 type Resource struct {
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+
 	// Optional annotations for the client.
 	Annotations *Annotations `json:"annotations,omitempty" yaml:"annotations,omitempty" mapstructure:"annotations,omitempty"`
 
@@ -2290,9 +2850,8 @@ type Resource struct {
 	// The MIME type of this resource, if known.
 	MimeType *string `json:"mimeType,omitempty" yaml:"mimeType,omitempty" mapstructure:"mimeType,omitempty"`
 
-	// A human-readable name for this resource.
-	//
-	// This can be used by clients to populate UI elements.
+	// Intended for programmatic or logical use, but used as a display name in past
+	// specs or fallback (if title isn't present).
 	Name string `json:"name" yaml:"name" mapstructure:"name"`
 
 	// The size of the raw resource content, in bytes (i.e., before base64 encoding or
@@ -2302,12 +2861,25 @@ type Resource struct {
 	// usage.
 	Size *int `json:"size,omitempty" yaml:"size,omitempty" mapstructure:"size,omitempty"`
 
+	// Intended for UI and end-user contexts — optimized to be human-readable and
+	// easily understood,
+	// even by those unfamiliar with domain-specific terminology.
+	//
+	// If not provided, the name should be used for display (except for Tool,
+	// where `annotations.title` should be given precedence over using `name`,
+	// if present).
+	Title *string `json:"title,omitempty" yaml:"title,omitempty" mapstructure:"title,omitempty"`
+
 	// The URI of this resource.
 	Uri string `json:"uri" yaml:"uri" mapstructure:"uri"`
 }
 
 // The contents of a specific resource or sub-resource.
 type ResourceContents struct {
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+
 	// The MIME type of this resource, if known.
 	MimeType *string `json:"mimeType,omitempty" yaml:"mimeType,omitempty" mapstructure:"mimeType,omitempty"`
 
@@ -2316,9 +2888,9 @@ type ResourceContents struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *ResourceContents) UnmarshalJSON(b []byte) error {
+func (j *ResourceContents) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["uri"]; raw != nil && !ok {
@@ -2326,10 +2898,83 @@ func (j *ResourceContents) UnmarshalJSON(b []byte) error {
 	}
 	type Plain ResourceContents
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = ResourceContents(plain)
+	return nil
+}
+
+// A resource that the server is capable of reading, included in a prompt or tool
+// call result.
+//
+// Note: resource links returned by tools are not guaranteed to appear in the
+// results of `resources/list` requests.
+type ResourceLink struct {
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+
+	// Optional annotations for the client.
+	Annotations *Annotations `json:"annotations,omitempty" yaml:"annotations,omitempty" mapstructure:"annotations,omitempty"`
+
+	// A description of what this resource represents.
+	//
+	// This can be used by clients to improve the LLM's understanding of available
+	// resources. It can be thought of like a "hint" to the model.
+	Description *string `json:"description,omitempty" yaml:"description,omitempty" mapstructure:"description,omitempty"`
+
+	// The MIME type of this resource, if known.
+	MimeType *string `json:"mimeType,omitempty" yaml:"mimeType,omitempty" mapstructure:"mimeType,omitempty"`
+
+	// Intended for programmatic or logical use, but used as a display name in past
+	// specs or fallback (if title isn't present).
+	Name string `json:"name" yaml:"name" mapstructure:"name"`
+
+	// The size of the raw resource content, in bytes (i.e., before base64 encoding or
+	// any tokenization), if known.
+	//
+	// This can be used by Hosts to display file sizes and estimate context window
+	// usage.
+	Size *int `json:"size,omitempty" yaml:"size,omitempty" mapstructure:"size,omitempty"`
+
+	// Intended for UI and end-user contexts — optimized to be human-readable and
+	// easily understood,
+	// even by those unfamiliar with domain-specific terminology.
+	//
+	// If not provided, the name should be used for display (except for Tool,
+	// where `annotations.title` should be given precedence over using `name`,
+	// if present).
+	Title *string `json:"title,omitempty" yaml:"title,omitempty" mapstructure:"title,omitempty"`
+
+	// Type corresponds to the JSON schema field "type".
+	Type string `json:"type" yaml:"type" mapstructure:"type"`
+
+	// The URI of this resource.
+	Uri string `json:"uri" yaml:"uri" mapstructure:"uri"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *ResourceLink) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["name"]; raw != nil && !ok {
+		return fmt.Errorf("field name in ResourceLink: required")
+	}
+	if _, ok := raw["type"]; raw != nil && !ok {
+		return fmt.Errorf("field type in ResourceLink: required")
+	}
+	if _, ok := raw["uri"]; raw != nil && !ok {
+		return fmt.Errorf("field uri in ResourceLink: required")
+	}
+	type Plain ResourceLink
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	*j = ResourceLink(plain)
 	return nil
 }
 
@@ -2345,21 +2990,17 @@ type ResourceListChangedNotification struct {
 }
 
 type ResourceListChangedNotificationParams struct {
-	// This parameter name is reserved by MCP to allow clients and servers to attach
-	// additional metadata to their notifications.
-	Meta ResourceListChangedNotificationParamsMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
 	AdditionalProperties interface{} `mapstructure:",remain"`
 }
 
-// This parameter name is reserved by MCP to allow clients and servers to attach
-// additional metadata to their notifications.
-type ResourceListChangedNotificationParamsMeta map[string]interface{}
-
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *ResourceListChangedNotification) UnmarshalJSON(b []byte) error {
+func (j *ResourceListChangedNotification) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -2367,45 +3008,19 @@ func (j *ResourceListChangedNotification) UnmarshalJSON(b []byte) error {
 	}
 	type Plain ResourceListChangedNotification
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = ResourceListChangedNotification(plain)
 	return nil
 }
 
-// A reference to a resource or resource template definition.
-type ResourceReference struct {
-	// Type corresponds to the JSON schema field "type".
-	Type string `json:"type" yaml:"type" mapstructure:"type"`
-
-	// The URI or URI template of the resource.
-	Uri string `json:"uri" yaml:"uri" mapstructure:"uri"`
-}
-
-// UnmarshalJSON implements json.Unmarshaler.
-func (j *ResourceReference) UnmarshalJSON(b []byte) error {
-	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
-		return err
-	}
-	if _, ok := raw["type"]; raw != nil && !ok {
-		return fmt.Errorf("field type in ResourceReference: required")
-	}
-	if _, ok := raw["uri"]; raw != nil && !ok {
-		return fmt.Errorf("field uri in ResourceReference: required")
-	}
-	type Plain ResourceReference
-	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
-		return err
-	}
-	*j = ResourceReference(plain)
-	return nil
-}
-
 // A template description for resources available on the server.
 type ResourceTemplate struct {
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+
 	// Optional annotations for the client.
 	Annotations *Annotations `json:"annotations,omitempty" yaml:"annotations,omitempty" mapstructure:"annotations,omitempty"`
 
@@ -2419,20 +3034,58 @@ type ResourceTemplate struct {
 	// included if all resources matching this template have the same type.
 	MimeType *string `json:"mimeType,omitempty" yaml:"mimeType,omitempty" mapstructure:"mimeType,omitempty"`
 
-	// A human-readable name for the type of resource this template refers to.
-	//
-	// This can be used by clients to populate UI elements.
+	// Intended for programmatic or logical use, but used as a display name in past
+	// specs or fallback (if title isn't present).
 	Name string `json:"name" yaml:"name" mapstructure:"name"`
+
+	// Intended for UI and end-user contexts — optimized to be human-readable and
+	// easily understood,
+	// even by those unfamiliar with domain-specific terminology.
+	//
+	// If not provided, the name should be used for display (except for Tool,
+	// where `annotations.title` should be given precedence over using `name`,
+	// if present).
+	Title *string `json:"title,omitempty" yaml:"title,omitempty" mapstructure:"title,omitempty"`
 
 	// A URI template (according to RFC 6570) that can be used to construct resource
 	// URIs.
 	UriTemplate string `json:"uriTemplate" yaml:"uriTemplate" mapstructure:"uriTemplate"`
 }
 
+// A reference to a resource or resource template definition.
+type ResourceTemplateReference struct {
+	// Type corresponds to the JSON schema field "type".
+	Type string `json:"type" yaml:"type" mapstructure:"type"`
+
+	// The URI or URI template of the resource.
+	Uri string `json:"uri" yaml:"uri" mapstructure:"uri"`
+}
+
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *ResourceTemplate) UnmarshalJSON(b []byte) error {
+func (j *ResourceTemplateReference) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["type"]; raw != nil && !ok {
+		return fmt.Errorf("field type in ResourceTemplateReference: required")
+	}
+	if _, ok := raw["uri"]; raw != nil && !ok {
+		return fmt.Errorf("field uri in ResourceTemplateReference: required")
+	}
+	type Plain ResourceTemplateReference
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	*j = ResourceTemplateReference(plain)
+	return nil
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *ResourceTemplate) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["name"]; raw != nil && !ok {
@@ -2443,7 +3096,7 @@ func (j *ResourceTemplate) UnmarshalJSON(b []byte) error {
 	}
 	type Plain ResourceTemplate
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = ResourceTemplate(plain)
@@ -2468,9 +3121,9 @@ type ResourceUpdatedNotificationParams struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *ResourceUpdatedNotificationParams) UnmarshalJSON(b []byte) error {
+func (j *ResourceUpdatedNotificationParams) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["uri"]; raw != nil && !ok {
@@ -2478,7 +3131,7 @@ func (j *ResourceUpdatedNotificationParams) UnmarshalJSON(b []byte) error {
 	}
 	type Plain ResourceUpdatedNotificationParams
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = ResourceUpdatedNotificationParams(plain)
@@ -2486,9 +3139,9 @@ func (j *ResourceUpdatedNotificationParams) UnmarshalJSON(b []byte) error {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *ResourceUpdatedNotification) UnmarshalJSON(b []byte) error {
+func (j *ResourceUpdatedNotification) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -2499,7 +3152,7 @@ func (j *ResourceUpdatedNotification) UnmarshalJSON(b []byte) error {
 	}
 	type Plain ResourceUpdatedNotification
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = ResourceUpdatedNotification(plain)
@@ -2507,9 +3160,9 @@ func (j *ResourceUpdatedNotification) UnmarshalJSON(b []byte) error {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *Resource) UnmarshalJSON(b []byte) error {
+func (j *Resource) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["name"]; raw != nil && !ok {
@@ -2520,7 +3173,7 @@ func (j *Resource) UnmarshalJSON(b []byte) error {
 	}
 	type Plain Resource
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = Resource(plain)
@@ -2528,16 +3181,12 @@ func (j *Resource) UnmarshalJSON(b []byte) error {
 }
 
 type Result struct {
-	// This result property is reserved by the protocol to allow clients and servers
-	// to attach additional metadata to their responses.
-	Meta ResultMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
 	AdditionalProperties interface{} `mapstructure:",remain"`
 }
-
-// This result property is reserved by the protocol to allow clients and servers to
-// attach additional metadata to their responses.
-type ResultMeta map[string]interface{}
 
 type Role string
 
@@ -2550,9 +3199,9 @@ var enumValues_Role = []interface{}{
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *Role) UnmarshalJSON(b []byte) error {
+func (j *Role) UnmarshalJSON(value []byte) error {
 	var v string
-	if err := json.Unmarshal(b, &v); err != nil {
+	if err := json.Unmarshal(value, &v); err != nil {
 		return err
 	}
 	var ok bool
@@ -2571,6 +3220,10 @@ func (j *Role) UnmarshalJSON(b []byte) error {
 
 // Represents a root directory or file that the server can operate on.
 type Root struct {
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+
 	// An optional name for the root. This can be used to provide a human-readable
 	// identifier for the root, which may be useful for display purposes or for
 	// referencing the root in other parts of the application.
@@ -2583,9 +3236,9 @@ type Root struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *Root) UnmarshalJSON(b []byte) error {
+func (j *Root) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["uri"]; raw != nil && !ok {
@@ -2593,7 +3246,7 @@ func (j *Root) UnmarshalJSON(b []byte) error {
 	}
 	type Plain Root
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = Root(plain)
@@ -2615,21 +3268,17 @@ type RootsListChangedNotification struct {
 }
 
 type RootsListChangedNotificationParams struct {
-	// This parameter name is reserved by MCP to allow clients and servers to attach
-	// additional metadata to their notifications.
-	Meta RootsListChangedNotificationParamsMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
 	AdditionalProperties interface{} `mapstructure:",remain"`
 }
 
-// This parameter name is reserved by MCP to allow clients and servers to attach
-// additional metadata to their notifications.
-type RootsListChangedNotificationParamsMeta map[string]interface{}
-
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *RootsListChangedNotification) UnmarshalJSON(b []byte) error {
+func (j *RootsListChangedNotification) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -2637,7 +3286,7 @@ func (j *RootsListChangedNotification) UnmarshalJSON(b []byte) error {
 	}
 	type Plain RootsListChangedNotification
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = RootsListChangedNotification(plain)
@@ -2647,16 +3296,70 @@ func (j *RootsListChangedNotification) UnmarshalJSON(b []byte) error {
 // Describes a message issued to or received from an LLM API.
 type SamplingMessage struct {
 	// Content corresponds to the JSON schema field "content".
-	Content interface{} `json:"content" yaml:"content" mapstructure:"content"`
+	Content SamplingMessageContent `json:"content" yaml:"content" mapstructure:"content"`
 
 	// Role corresponds to the JSON schema field "role".
 	Role Role `json:"role" yaml:"role" mapstructure:"role"`
 }
 
+// Text provided to or from an LLM.
+type SamplingMessageContent struct {
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+
+	// Optional annotations for the client.
+	Annotations *Annotations `json:"annotations,omitempty" yaml:"annotations,omitempty" mapstructure:"annotations,omitempty"`
+
+	// The base64-encoded image data.
+	Data string `json:"data" yaml:"data" mapstructure:"data"`
+
+	// The MIME type of the image. Different providers may support different image
+	// types.
+	MimeType string `json:"mimeType" yaml:"mimeType" mapstructure:"mimeType"`
+
+	// The text content of the message.
+	Text string `json:"text" yaml:"text" mapstructure:"text"`
+
+	// Type corresponds to the JSON schema field "type".
+	Type string `json:"type" yaml:"type" mapstructure:"type"`
+}
+
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *SamplingMessage) UnmarshalJSON(b []byte) error {
+func (j *SamplingMessageContent) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	var samplingMessageContent_0 SamplingMessageContent_0
+	var samplingMessageContent_1 SamplingMessageContent_1
+	var samplingMessageContent_2 SamplingMessageContent_2
+	var errs []error
+	if err := samplingMessageContent_0.UnmarshalJSON(value); err != nil {
+		errs = append(errs, err)
+	}
+	if err := samplingMessageContent_1.UnmarshalJSON(value); err != nil {
+		errs = append(errs, err)
+	}
+	if err := samplingMessageContent_2.UnmarshalJSON(value); err != nil {
+		errs = append(errs, err)
+	}
+	if len(errs) == 3 {
+		return fmt.Errorf("all validators failed: %s", errors.Join(errs...))
+	}
+	type Plain SamplingMessageContent
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	*j = SamplingMessageContent(plain)
+	return nil
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *SamplingMessage) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["content"]; raw != nil && !ok {
@@ -2667,7 +3370,7 @@ func (j *SamplingMessage) UnmarshalJSON(b []byte) error {
 	}
 	type Plain SamplingMessage
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = SamplingMessage(plain)
@@ -2679,13 +3382,13 @@ func (j *SamplingMessage) UnmarshalJSON(b []byte) error {
 // additional capabilities.
 type ServerCapabilities struct {
 	// Present if the server supports argument autocompletion suggestions.
-	Completions ServerCapabilitiesCompletions `json:"completions,omitempty" yaml:"completions,omitempty" mapstructure:"completions,omitempty"`
+	Completions map[string]interface{} `json:"completions,omitempty" yaml:"completions,omitempty" mapstructure:"completions,omitempty"`
 
 	// Experimental, non-standard capabilities that the server supports.
-	Experimental ServerCapabilitiesExperimental `json:"experimental,omitempty" yaml:"experimental,omitempty" mapstructure:"experimental,omitempty"`
+	Experimental map[string]map[string]interface{} `json:"experimental,omitempty" yaml:"experimental,omitempty" mapstructure:"experimental,omitempty"`
 
 	// Present if the server supports sending log messages to the client.
-	Logging ServerCapabilitiesLogging `json:"logging,omitempty" yaml:"logging,omitempty" mapstructure:"logging,omitempty"`
+	Logging map[string]interface{} `json:"logging,omitempty" yaml:"logging,omitempty" mapstructure:"logging,omitempty"`
 
 	// Present if the server offers any prompt templates.
 	Prompts *ServerCapabilitiesPrompts `json:"prompts,omitempty" yaml:"prompts,omitempty" mapstructure:"prompts,omitempty"`
@@ -2696,15 +3399,6 @@ type ServerCapabilities struct {
 	// Present if the server offers any tools to call.
 	Tools *ServerCapabilitiesTools `json:"tools,omitempty" yaml:"tools,omitempty" mapstructure:"tools,omitempty"`
 }
-
-// Present if the server supports argument autocompletion suggestions.
-type ServerCapabilitiesCompletions map[string]interface{}
-
-// Experimental, non-standard capabilities that the server supports.
-type ServerCapabilitiesExperimental map[string]map[string]interface{}
-
-// Present if the server supports sending log messages to the client.
-type ServerCapabilitiesLogging map[string]interface{}
 
 // Present if the server offers any prompt templates.
 type ServerCapabilitiesPrompts struct {
@@ -2750,9 +3444,9 @@ type SetLevelRequestParams struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *SetLevelRequestParams) UnmarshalJSON(b []byte) error {
+func (j *SetLevelRequestParams) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["level"]; raw != nil && !ok {
@@ -2760,7 +3454,7 @@ func (j *SetLevelRequestParams) UnmarshalJSON(b []byte) error {
 	}
 	type Plain SetLevelRequestParams
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = SetLevelRequestParams(plain)
@@ -2768,9 +3462,9 @@ func (j *SetLevelRequestParams) UnmarshalJSON(b []byte) error {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *SetLevelRequest) UnmarshalJSON(b []byte) error {
+func (j *SetLevelRequest) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -2781,10 +3475,82 @@ func (j *SetLevelRequest) UnmarshalJSON(b []byte) error {
 	}
 	type Plain SetLevelRequest
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = SetLevelRequest(plain)
+	return nil
+}
+
+type StringSchema struct {
+	// Description corresponds to the JSON schema field "description".
+	Description *string `json:"description,omitempty" yaml:"description,omitempty" mapstructure:"description,omitempty"`
+
+	// Format corresponds to the JSON schema field "format".
+	Format *StringSchemaFormat `json:"format,omitempty" yaml:"format,omitempty" mapstructure:"format,omitempty"`
+
+	// MaxLength corresponds to the JSON schema field "maxLength".
+	MaxLength *int `json:"maxLength,omitempty" yaml:"maxLength,omitempty" mapstructure:"maxLength,omitempty"`
+
+	// MinLength corresponds to the JSON schema field "minLength".
+	MinLength *int `json:"minLength,omitempty" yaml:"minLength,omitempty" mapstructure:"minLength,omitempty"`
+
+	// Title corresponds to the JSON schema field "title".
+	Title *string `json:"title,omitempty" yaml:"title,omitempty" mapstructure:"title,omitempty"`
+
+	// Type corresponds to the JSON schema field "type".
+	Type string `json:"type" yaml:"type" mapstructure:"type"`
+}
+
+type StringSchemaFormat string
+
+const StringSchemaFormatDate StringSchemaFormat = "date"
+const StringSchemaFormatDateTime StringSchemaFormat = "date-time"
+const StringSchemaFormatEmail StringSchemaFormat = "email"
+const StringSchemaFormatUri StringSchemaFormat = "uri"
+
+var enumValues_StringSchemaFormat = []interface{}{
+	"date",
+	"date-time",
+	"email",
+	"uri",
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *StringSchemaFormat) UnmarshalJSON(value []byte) error {
+	var v string
+	if err := json.Unmarshal(value, &v); err != nil {
+		return err
+	}
+	var ok bool
+	for _, expected := range enumValues_StringSchemaFormat {
+		if reflect.DeepEqual(v, expected) {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return fmt.Errorf("invalid value (expected one of %#v): %#v", enumValues_StringSchemaFormat, v)
+	}
+	*j = StringSchemaFormat(v)
+	return nil
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *StringSchema) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["type"]; raw != nil && !ok {
+		return fmt.Errorf("field type in StringSchema: required")
+	}
+	type Plain StringSchema
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	*j = StringSchema(plain)
 	return nil
 }
 
@@ -2805,9 +3571,9 @@ type SubscribeRequestParams struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *SubscribeRequestParams) UnmarshalJSON(b []byte) error {
+func (j *SubscribeRequestParams) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["uri"]; raw != nil && !ok {
@@ -2815,7 +3581,7 @@ func (j *SubscribeRequestParams) UnmarshalJSON(b []byte) error {
 	}
 	type Plain SubscribeRequestParams
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = SubscribeRequestParams(plain)
@@ -2823,9 +3589,9 @@ func (j *SubscribeRequestParams) UnmarshalJSON(b []byte) error {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *SubscribeRequest) UnmarshalJSON(b []byte) error {
+func (j *SubscribeRequest) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -2836,7 +3602,7 @@ func (j *SubscribeRequest) UnmarshalJSON(b []byte) error {
 	}
 	type Plain SubscribeRequest
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = SubscribeRequest(plain)
@@ -2845,6 +3611,10 @@ func (j *SubscribeRequest) UnmarshalJSON(b []byte) error {
 
 // Text provided to or from an LLM.
 type TextContent struct {
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+
 	// Optional annotations for the client.
 	Annotations *Annotations `json:"annotations,omitempty" yaml:"annotations,omitempty" mapstructure:"annotations,omitempty"`
 
@@ -2856,9 +3626,9 @@ type TextContent struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *TextContent) UnmarshalJSON(b []byte) error {
+func (j *TextContent) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["text"]; raw != nil && !ok {
@@ -2869,7 +3639,7 @@ func (j *TextContent) UnmarshalJSON(b []byte) error {
 	}
 	type Plain TextContent
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = TextContent(plain)
@@ -2877,6 +3647,10 @@ func (j *TextContent) UnmarshalJSON(b []byte) error {
 }
 
 type TextResourceContents struct {
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+
 	// The MIME type of this resource, if known.
 	MimeType *string `json:"mimeType,omitempty" yaml:"mimeType,omitempty" mapstructure:"mimeType,omitempty"`
 
@@ -2889,9 +3663,9 @@ type TextResourceContents struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *TextResourceContents) UnmarshalJSON(b []byte) error {
+func (j *TextResourceContents) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["text"]; raw != nil && !ok {
@@ -2902,7 +3676,7 @@ func (j *TextResourceContents) UnmarshalJSON(b []byte) error {
 	}
 	type Plain TextResourceContents
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = TextResourceContents(plain)
@@ -2911,7 +3685,13 @@ func (j *TextResourceContents) UnmarshalJSON(b []byte) error {
 
 // Definition for a tool the client can call.
 type Tool struct {
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+
 	// Optional additional tool information.
+	//
+	// Display name precedence order is: title, annotations.title, then name.
 	Annotations *ToolAnnotations `json:"annotations,omitempty" yaml:"annotations,omitempty" mapstructure:"annotations,omitempty"`
 
 	// A human-readable description of the tool.
@@ -2923,8 +3703,23 @@ type Tool struct {
 	// A JSON Schema object defining the expected parameters for the tool.
 	InputSchema ToolInputSchema `json:"inputSchema" yaml:"inputSchema" mapstructure:"inputSchema"`
 
-	// The name of the tool.
+	// Intended for programmatic or logical use, but used as a display name in past
+	// specs or fallback (if title isn't present).
 	Name string `json:"name" yaml:"name" mapstructure:"name"`
+
+	// An optional JSON Schema object defining the structure of the tool's output
+	// returned in
+	// the structuredContent field of a CallToolResult.
+	OutputSchema *ToolOutputSchema `json:"outputSchema,omitempty" yaml:"outputSchema,omitempty" mapstructure:"outputSchema,omitempty"`
+
+	// Intended for UI and end-user contexts — optimized to be human-readable and
+	// easily understood,
+	// even by those unfamiliar with domain-specific terminology.
+	//
+	// If not provided, the name should be used for display (except for Tool,
+	// where `annotations.title` should be given precedence over using `name`,
+	// if present).
+	Title *string `json:"title,omitempty" yaml:"title,omitempty" mapstructure:"title,omitempty"`
 }
 
 // Additional properties describing a Tool to clients.
@@ -2969,10 +3764,30 @@ type ToolAnnotations struct {
 	Title *string `json:"title,omitempty" yaml:"title,omitempty" mapstructure:"title,omitempty"`
 }
 
+type EmbeddedResourceResource_0 = TextResourceContents
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *ToolOutputSchema) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["type"]; raw != nil && !ok {
+		return fmt.Errorf("field type in ToolOutputSchema: required")
+	}
+	type Plain ToolOutputSchema
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	*j = ToolOutputSchema(plain)
+	return nil
+}
+
 // A JSON Schema object defining the expected parameters for the tool.
 type ToolInputSchema struct {
 	// Properties corresponds to the JSON schema field "properties".
-	Properties ToolInputSchemaProperties `json:"properties,omitempty" yaml:"properties,omitempty" mapstructure:"properties,omitempty"`
+	Properties map[string]map[string]interface{} `json:"properties,omitempty" yaml:"properties,omitempty" mapstructure:"properties,omitempty"`
 
 	// Required corresponds to the JSON schema field "required".
 	Required []string `json:"required,omitempty" yaml:"required,omitempty" mapstructure:"required,omitempty"`
@@ -2981,12 +3796,36 @@ type ToolInputSchema struct {
 	Type string `json:"type" yaml:"type" mapstructure:"type"`
 }
 
-type ToolInputSchemaProperties map[string]map[string]interface{}
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *Tool) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["inputSchema"]; raw != nil && !ok {
+		return fmt.Errorf("field inputSchema in Tool: required")
+	}
+	if _, ok := raw["name"]; raw != nil && !ok {
+		return fmt.Errorf("field name in Tool: required")
+	}
+	type Plain Tool
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	*j = Tool(plain)
+	return nil
+}
+
+type SamplingMessageContent_2 = AudioContent
+type SamplingMessageContent_1 = ImageContent
+type CreateMessageResultContent_0 = TextContent
+type SamplingMessageContent_0 = TextContent
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *ToolInputSchema) UnmarshalJSON(b []byte) error {
+func (j *ToolInputSchema) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["type"]; raw != nil && !ok {
@@ -2994,11 +3833,41 @@ func (j *ToolInputSchema) UnmarshalJSON(b []byte) error {
 	}
 	type Plain ToolInputSchema
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = ToolInputSchema(plain)
 	return nil
+}
+
+type ReadResourceResultContentsElem_0 = TextResourceContents
+type CompleteRequestParamsRef_1 = ResourceTemplateReference
+type CompleteRequestParamsRef_0 = PromptReference
+
+// An optional JSON Schema object defining the structure of the tool's output
+// returned in
+// the structuredContent field of a CallToolResult.
+type ToolOutputSchema struct {
+	// Properties corresponds to the JSON schema field "properties".
+	Properties map[string]map[string]interface{} `json:"properties,omitempty" yaml:"properties,omitempty" mapstructure:"properties,omitempty"`
+
+	// Required corresponds to the JSON schema field "required".
+	Required []string `json:"required,omitempty" yaml:"required,omitempty" mapstructure:"required,omitempty"`
+
+	// Type corresponds to the JSON schema field "type".
+	Type string `json:"type" yaml:"type" mapstructure:"type"`
+}
+
+type ReadResourceResultContentsElem_1 = BlobResourceContents
+type CreateMessageResultContent_1 = ImageContent
+type EmbeddedResourceResource_1 = BlobResourceContents
+type CreateMessageResultContent_2 = AudioContent
+type ToolListChangedNotificationParams struct {
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]interface{} `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+
+	AdditionalProperties interface{} `mapstructure:",remain"`
 }
 
 // An optional notification from the server to the client, informing it that the
@@ -3012,22 +3881,10 @@ type ToolListChangedNotification struct {
 	Params *ToolListChangedNotificationParams `json:"params,omitempty" yaml:"params,omitempty" mapstructure:"params,omitempty"`
 }
 
-type ToolListChangedNotificationParams struct {
-	// This parameter name is reserved by MCP to allow clients and servers to attach
-	// additional metadata to their notifications.
-	Meta ToolListChangedNotificationParamsMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
-
-	AdditionalProperties interface{} `mapstructure:",remain"`
-}
-
-// This parameter name is reserved by MCP to allow clients and servers to attach
-// additional metadata to their notifications.
-type ToolListChangedNotificationParamsMeta map[string]interface{}
-
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *ToolListChangedNotification) UnmarshalJSON(b []byte) error {
+func (j *ToolListChangedNotification) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -3035,31 +3892,33 @@ func (j *ToolListChangedNotification) UnmarshalJSON(b []byte) error {
 	}
 	type Plain ToolListChangedNotification
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = ToolListChangedNotification(plain)
 	return nil
 }
 
+type UnsubscribeRequestParams struct {
+	// The URI of the resource to unsubscribe from.
+	Uri string `json:"uri" yaml:"uri" mapstructure:"uri"`
+}
+
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *Tool) UnmarshalJSON(b []byte) error {
+func (j *UnsubscribeRequestParams) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
-	if _, ok := raw["inputSchema"]; raw != nil && !ok {
-		return fmt.Errorf("field inputSchema in Tool: required")
+	if _, ok := raw["uri"]; raw != nil && !ok {
+		return fmt.Errorf("field uri in UnsubscribeRequestParams: required")
 	}
-	if _, ok := raw["name"]; raw != nil && !ok {
-		return fmt.Errorf("field name in Tool: required")
-	}
-	type Plain Tool
+	type Plain UnsubscribeRequestParams
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
-	*j = Tool(plain)
+	*j = UnsubscribeRequestParams(plain)
 	return nil
 }
 
@@ -3073,33 +3932,10 @@ type UnsubscribeRequest struct {
 	Params UnsubscribeRequestParams `json:"params" yaml:"params" mapstructure:"params"`
 }
 
-type UnsubscribeRequestParams struct {
-	// The URI of the resource to unsubscribe from.
-	Uri string `json:"uri" yaml:"uri" mapstructure:"uri"`
-}
-
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *UnsubscribeRequestParams) UnmarshalJSON(b []byte) error {
+func (j *UnsubscribeRequest) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
-		return err
-	}
-	if _, ok := raw["uri"]; raw != nil && !ok {
-		return fmt.Errorf("field uri in UnsubscribeRequestParams: required")
-	}
-	type Plain UnsubscribeRequestParams
-	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
-		return err
-	}
-	*j = UnsubscribeRequestParams(plain)
-	return nil
-}
-
-// UnmarshalJSON implements json.Unmarshaler.
-func (j *UnsubscribeRequest) UnmarshalJSON(b []byte) error {
-	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["method"]; raw != nil && !ok {
@@ -3110,7 +3946,7 @@ func (j *UnsubscribeRequest) UnmarshalJSON(b []byte) error {
 	}
 	type Plain UnsubscribeRequest
 	var plain Plain
-	if err := json.Unmarshal(b, &plain); err != nil {
+	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
 	*j = UnsubscribeRequest(plain)
