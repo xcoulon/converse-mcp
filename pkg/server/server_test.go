@@ -11,8 +11,8 @@ import (
 	"github.com/creachadair/jrpc2/channel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	api "github.com/xcoulon/converse/pkg/api"
 	"github.com/xcoulon/converse/pkg/server"
-	"github.com/xcoulon/converse/pkg/types"
 )
 
 func TestServer(t *testing.T) {
@@ -21,12 +21,12 @@ func TestServer(t *testing.T) {
 	c2s, s2c := channel.Direct()
 	cl := jrpc2.NewClient(c2s, &jrpc2.ClientOptions{})
 	srv := server.New("converse", "0.1").
-		Prompt(types.Prompt{Name: "my-first-prompt"}, server.EmptyPromptHandle).
-		Prompt(types.Prompt{Name: "my-second-prompt"}, server.EmptyPromptHandle).
-		Resource(types.Resource{Name: "my-first-resource"}, server.EmptyResourceHandle).
-		Resource(types.Resource{Name: "my-second-resource"}, server.EmptyResourceHandle).
-		Tool(types.Tool{Name: "my-first-tool"}, server.EmptyToolHandle).
-		Tool(types.Tool{Name: "my-second-tool"}, server.EmptyToolHandle).
+		Prompt(api.Prompt{Name: "my-first-prompt"}, server.EmptyPromptHandle).
+		Prompt(api.Prompt{Name: "my-second-prompt"}, server.EmptyPromptHandle).
+		Resource(api.Resource{Name: "my-first-resource"}, server.EmptyResourceHandle).
+		Resource(api.Resource{Name: "my-second-resource"}, server.EmptyResourceHandle).
+		Tool(api.Tool{Name: "my-first-tool"}, server.EmptyToolHandle).
+		Tool(api.Tool{Name: "my-second-tool"}, server.EmptyToolHandle).
 		Start(logger, s2c)
 	defer func(cl *jrpc2.Client, srv *jrpc2.Server) {
 		// close the streams
@@ -36,17 +36,17 @@ func TestServer(t *testing.T) {
 
 	t.Run("initialize", func(t *testing.T) {
 		// when
-		resp, err := cl.Call(context.Background(), "initialize", types.InitializeRequestParams{})
+		resp, err := cl.Call(context.Background(), "initialize", api.InitializeRequestParams{})
 
 		// then
 		require.NoError(t, err)
-		expected := types.InitializeResult{
+		expected := api.InitializeResult{
 			ProtocolVersion: "2025-03-26",
-			ServerInfo: types.Implementation{
+			ServerInfo: api.Implementation{
 				Name:    "converse",
 				Version: "0.1",
 			},
-			Capabilities: types.DefaultCapabilities,
+			Capabilities: api.DefaultCapabilities,
 		}
 		expectedJSON, err := json.Marshal(expected)
 		require.NoError(t, err)
@@ -55,12 +55,12 @@ func TestServer(t *testing.T) {
 
 	t.Run("list prompts", func(t *testing.T) {
 		// when
-		resp, err := cl.Call(context.Background(), "prompts/list", types.ListResourcesRequestParams{})
+		resp, err := cl.Call(context.Background(), "prompts/list", api.ListResourcesRequestParams{})
 
 		// then
 		require.NoError(t, err)
-		expected := types.ListPromptsResult{
-			Prompts: []types.Prompt{
+		expected := api.ListPromptsResult{
+			Prompts: []api.Prompt{
 				{
 					Name: "my-first-prompt",
 				},
@@ -75,12 +75,12 @@ func TestServer(t *testing.T) {
 
 	t.Run("list resources", func(t *testing.T) {
 		// when
-		resp, err := cl.Call(context.Background(), "resources/list", types.ListResourcesRequestParams{})
+		resp, err := cl.Call(context.Background(), "resources/list", api.ListResourcesRequestParams{})
 
 		// then
 		require.NoError(t, err)
-		expected := types.ListResourcesResult{
-			Resources: []types.Resource{
+		expected := api.ListResourcesResult{
+			Resources: []api.Resource{
 				{
 					Name: "my-first-resource",
 				},
@@ -95,12 +95,12 @@ func TestServer(t *testing.T) {
 
 	t.Run("list tools", func(t *testing.T) {
 		// when
-		resp, err := cl.Call(context.Background(), "tools/list", types.ListResourcesRequestParams{})
+		resp, err := cl.Call(context.Background(), "tools/list", api.ListResourcesRequestParams{})
 
 		// then
 		require.NoError(t, err)
-		expected := types.ListToolsResult{
-			Tools: []types.Tool{
+		expected := api.ListToolsResult{
+			Tools: []api.Tool{
 				{
 					Name: "my-first-tool",
 				},

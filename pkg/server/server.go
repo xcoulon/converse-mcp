@@ -9,27 +9,27 @@ import (
 	"github.com/creachadair/jrpc2"
 	"github.com/creachadair/jrpc2/channel"
 	"github.com/creachadair/jrpc2/handler"
-	"github.com/xcoulon/converse/pkg/types"
+	"github.com/xcoulon/converse/pkg/api"
 )
 
 var StdioChannel = channel.Line(os.Stdin, os.Stdout)
 
 type Builder struct {
-	capabilities types.ServerCapabilities
-	serverInfo   types.Implementation
+	capabilities api.ServerCapabilities
+	serverInfo   api.Implementation
 	prompts      []PromptHandler
 	resources    []ResourceHandler
 	tools        []ToolHandler
 }
 
-func New(name, version string, capabilities ...types.ServerCapability) *Builder {
-	sc := types.DefaultCapabilities
+func New(name, version string, capabilities ...api.ServerCapability) *Builder {
+	sc := api.DefaultCapabilities
 	for _, apply := range capabilities {
 		apply(&sc)
 	}
 	return &Builder{
 		capabilities: sc,
-		serverInfo: types.Implementation{
+		serverInfo: api.Implementation{
 			Name:    name,
 			Version: version,
 		},
@@ -39,7 +39,7 @@ func New(name, version string, capabilities ...types.ServerCapability) *Builder 
 	}
 }
 
-func (b *Builder) Prompt(prompt types.Prompt, handle PromptHandleFunc) *Builder {
+func (b *Builder) Prompt(prompt api.Prompt, handle PromptHandleFunc) *Builder {
 	b.prompts = append(b.prompts, PromptHandler{
 		Prompt: prompt,
 		Handle: handle,
@@ -47,7 +47,7 @@ func (b *Builder) Prompt(prompt types.Prompt, handle PromptHandleFunc) *Builder 
 	return b
 }
 
-func (b *Builder) Resource(resource types.Resource, handle ResourceHandleFunc) *Builder {
+func (b *Builder) Resource(resource api.Resource, handle ResourceHandleFunc) *Builder {
 	b.resources = append(b.resources, ResourceHandler{
 		Resource: resource,
 		Handle:   handle,
@@ -60,7 +60,7 @@ func (b *Builder) Tools(tools ...ToolHandler) *Builder {
 	return b
 }
 
-func (b *Builder) Tool(tool types.Tool, handle ToolHandleFunc) *Builder {
+func (b *Builder) Tool(tool api.Tool, handle ToolHandleFunc) *Builder {
 	b.tools = append(b.tools, ToolHandler{
 		Tool:   tool,
 		Handle: handle,
@@ -87,9 +87,9 @@ func (b *Builder) Start(logger *slog.Logger, c channel.Channel) *jrpc2.Server {
 
 var protocolVersion = "2025-03-26"
 
-func initialize(capabilities types.ServerCapabilities, serverInfo types.Implementation) jrpc2.Handler {
+func initialize(capabilities api.ServerCapabilities, serverInfo api.Implementation) jrpc2.Handler {
 	return func(_ context.Context, _ *jrpc2.Request) (any, error) {
-		return &types.InitializeResult{
+		return &api.InitializeResult{
 			ProtocolVersion: protocolVersion,
 			ServerInfo:      serverInfo,
 			Capabilities:    capabilities,
@@ -98,12 +98,12 @@ func initialize(capabilities types.ServerCapabilities, serverInfo types.Implemen
 }
 
 func listPrompts(handlers []PromptHandler) jrpc2.Handler {
-	prompts := make([]types.Prompt, 0, len(handlers))
+	prompts := make([]api.Prompt, 0, len(handlers))
 	for _, h := range handlers {
 		prompts = append(prompts, h.Prompt)
 	}
 	return func(_ context.Context, _ *jrpc2.Request) (any, error) {
-		return &types.ListPromptsResult{
+		return &api.ListPromptsResult{
 			Prompts: prompts,
 		}, nil
 	}
@@ -115,7 +115,7 @@ func getPrompt(logger *slog.Logger, handlers []PromptHandler) jrpc2.Handler {
 		prompts[h.Name] = h
 	}
 	return func(ctx context.Context, req *jrpc2.Request) (any, error) {
-		params := types.GetPromptRequestParams{}
+		params := api.GetPromptRequestParams{}
 		if err := req.UnmarshalParams(&params); err != nil {
 			return nil, fmt.Errorf("error while unmarshalling '%s' request parameters: %w", req.Method(), err)
 		}
@@ -127,12 +127,12 @@ func getPrompt(logger *slog.Logger, handlers []PromptHandler) jrpc2.Handler {
 }
 
 func listResources(handlers []ResourceHandler) jrpc2.Handler {
-	resources := make([]types.Resource, 0, len(handlers))
+	resources := make([]api.Resource, 0, len(handlers))
 	for _, h := range handlers {
 		resources = append(resources, h.Resource)
 	}
 	return func(_ context.Context, _ *jrpc2.Request) (any, error) {
-		return &types.ListResourcesResult{
+		return &api.ListResourcesResult{
 			Resources: resources,
 		}, nil
 	}
@@ -144,7 +144,7 @@ func readResource(logger *slog.Logger, handlers []ResourceHandler) jrpc2.Handler
 		resources[h.Name] = h
 	}
 	return func(ctx context.Context, req *jrpc2.Request) (any, error) {
-		params := types.ReadResourceRequestParams{}
+		params := api.ReadResourceRequestParams{}
 		if err := req.UnmarshalParams(&params); err != nil {
 			return nil, fmt.Errorf("error while unmarshalling '%s' request parameters: %w", req.Method(), err)
 		}
@@ -156,12 +156,12 @@ func readResource(logger *slog.Logger, handlers []ResourceHandler) jrpc2.Handler
 }
 
 func listTools(handlers []ToolHandler) jrpc2.Handler {
-	tools := make([]types.Tool, 0, len(handlers))
+	tools := make([]api.Tool, 0, len(handlers))
 	for _, h := range handlers {
 		tools = append(tools, h.Tool)
 	}
 	return func(_ context.Context, _ *jrpc2.Request) (any, error) {
-		return &types.ListToolsResult{
+		return &api.ListToolsResult{
 			Tools: tools,
 		}, nil
 	}
@@ -173,7 +173,7 @@ func callTool(logger *slog.Logger, handlers []ToolHandler) jrpc2.Handler {
 		tools[h.Name] = h
 	}
 	return func(ctx context.Context, req *jrpc2.Request) (any, error) {
-		params := types.CallToolRequestParams{}
+		params := api.CallToolRequestParams{}
 		if err := req.UnmarshalParams(&params); err != nil {
 			return nil, fmt.Errorf("error while unmarshalling '%s' request parameters: %w", req.Method(), err)
 		}

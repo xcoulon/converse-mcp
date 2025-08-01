@@ -1,4 +1,4 @@
-package types
+package api
 
 var DefaultCapabilities = ServerCapabilities{
 	Prompts: &ServerCapabilitiesPrompts{

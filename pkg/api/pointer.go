@@ -1,4 +1,4 @@
-package types
+package api
 
 func ToBoolPtr(v bool) *bool {
 	return &v
