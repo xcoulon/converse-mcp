@@ -41,6 +41,29 @@ func New(name, version string, capabilities ...api.ServerCapability) *Builder {
 	}
 }
 
+func (b *Builder) Build(logger *slog.Logger) *jrpc2.Server {
+	mux := handler.Map{
+		"initialize":     initialize(b.capabilities, b.serverInfo),
+		"prompts/list":   listPrompts(b.prompts),
+		"prompts/get":    getPrompt(logger, b.prompts),
+		"resources/list": listResources(b.resources),
+		"resources/read": readResource(logger, b.resources),
+		"tools/list":     listTools(b.tools),
+		"tools/call":     callTool(logger, b.tools),
+	}
+	opts := &jrpc2.ServerOptions{
+		Logger: func(text string) {
+			if err := logger.Handler().Handle(context.Background(), slog.Record{
+				Level:   slog.LevelInfo,
+				Message: text,
+			}); err != nil {
+				logger.Error("error logging message", "error", err)
+			}
+		},
+	}
+	return jrpc2.NewServer(mux, opts)
+}
+
 func (b *Builder) Prompt(prompt api.Prompt, handle PromptHandleFunc) *Builder {
 	b.prompts = append(b.prompts, PromptHandler{
 		Prompt: prompt,
@@ -68,23 +91,6 @@ func (b *Builder) Tool(tool api.Tool, handle ToolHandleFunc) *Builder {
 		Handle: handle,
 	})
 	return b
-}
-
-func (b *Builder) Start(logger *slog.Logger, c channel.Channel) *jrpc2.Server {
-	mux := handler.Map{
-		"initialize":     initialize(b.capabilities, b.serverInfo),
-		"prompts/list":   listPrompts(b.prompts),
-		"prompts/get":    getPrompt(logger, b.prompts),
-		"resources/list": listResources(b.resources),
-		"resources/read": readResource(logger, b.resources),
-		"tools/list":     listTools(b.tools),
-		"tools/call":     callTool(logger, b.tools),
-	}
-	opts := &jrpc2.ServerOptions{
-		// Logger: jrpc2.StdLogger(logger),
-	}
-	s := jrpc2.NewServer(mux, opts)
-	return s.Start(c)
 }
 
 func initialize(capabilities api.ServerCapabilities, serverInfo api.Implementation) jrpc2.Handler {

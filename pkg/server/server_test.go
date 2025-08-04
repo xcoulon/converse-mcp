@@ -27,7 +27,8 @@ func TestServer(t *testing.T) {
 		Resource(api.Resource{Name: "my-second-resource"}, server.EmptyResourceHandle).
 		Tool(api.Tool{Name: "my-first-tool"}, server.EmptyToolHandle).
 		Tool(api.Tool{Name: "my-second-tool"}, server.EmptyToolHandle).
-		Start(logger, s2c)
+		Build(logger)
+	srv.Start(s2c)
 	defer func(cl *jrpc2.Client, srv *jrpc2.Server) {
 		// close the streams
 		cl.Close()
