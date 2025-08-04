@@ -11,8 +11,8 @@ import (
 	"github.com/creachadair/jrpc2/channel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	api "github.com/xcoulon/converse/pkg/api"
-	"github.com/xcoulon/converse/pkg/server"
+	api "github.com/xcoulon/converse-mcp/pkg/api"
+	"github.com/xcoulon/converse-mcp/pkg/server"
 )
 
 func TestServer(t *testing.T) {

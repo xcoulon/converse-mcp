@@ -1,4 +1,4 @@
-module github.com/xcoulon/converse
+module github.com/xcoulon/converse-mcp
 
 go 1.24.1
 

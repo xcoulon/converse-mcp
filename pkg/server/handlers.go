@@ -4,7 +4,7 @@ import (
 	"context"
 	"log/slog"
 
-	api "github.com/xcoulon/converse/pkg/api"
+	api "github.com/xcoulon/converse-mcp/pkg/api"
 )
 
 type PromptHandleFunc func(ctx context.Context, logger *slog.Logger, params api.GetPromptRequestParams) (any, error)

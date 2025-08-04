@@ -9,7 +9,7 @@ import (
 	"github.com/creachadair/jrpc2"
 	"github.com/creachadair/jrpc2/channel"
 	"github.com/creachadair/jrpc2/handler"
-	"github.com/xcoulon/converse/pkg/api"
+	"github.com/xcoulon/converse-mcp/pkg/api"
 )
 
 var StdioChannel = channel.Line(os.Stdin, os.Stdout)

@@ -1,6 +1,6 @@
-# Converse
+# Converse MCP
 
-Converse empowers developers to rapidly build Model Context Protocol Servers in Go with unprecedented ease.
+Converse MCP empowers developers to rapidly build Model Context Protocol Servers in Go with unprecedented ease.
 
 ## Building and Installing
 
