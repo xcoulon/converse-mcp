@@ -20,7 +20,7 @@ func TestServer(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	c2s, s2c := channel.Direct()
 	cl := jrpc2.NewClient(c2s, &jrpc2.ClientOptions{})
-	srv := server.New("converse", "0.1").
+	srv := server.New("converse-mcp", "0.1").
 		Prompt(api.Prompt{Name: "my-first-prompt"}, server.EmptyPromptHandle).
 		Prompt(api.Prompt{Name: "my-second-prompt"}, server.EmptyPromptHandle).
 		Resource(api.Resource{Name: "my-first-resource"}, server.EmptyResourceHandle).
@@ -41,9 +41,9 @@ func TestServer(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		expected := api.InitializeResult{
-			ProtocolVersion: "2025-03-26",
+			ProtocolVersion: "2025-06-18",
 			ServerInfo: api.Implementation{
-				Name:    "converse",
+				Name:    "converse-mcp",
 				Version: "0.1",
 			},
 			Capabilities: api.DefaultCapabilities,

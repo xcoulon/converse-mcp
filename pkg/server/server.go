@@ -12,6 +12,8 @@ import (
 	"github.com/xcoulon/converse-mcp/pkg/api"
 )
 
+const protocolVersion = "2025-06-18"
+
 var StdioChannel = channel.Line(os.Stdin, os.Stdout)
 
 type Builder struct {
@@ -84,8 +86,6 @@ func (b *Builder) Start(logger *slog.Logger, c channel.Channel) *jrpc2.Server {
 	s := jrpc2.NewServer(mux, opts)
 	return s.Start(c)
 }
-
-var protocolVersion = "2025-03-26"
 
 func initialize(capabilities api.ServerCapabilities, serverInfo api.Implementation) jrpc2.Handler {
 	return func(_ context.Context, _ *jrpc2.Request) (any, error) {
