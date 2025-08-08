@@ -15,19 +15,31 @@ import (
 	"github.com/xcoulon/converse-mcp/pkg/server"
 )
 
+var EmptyPromptHandle server.PromptHandleFunc = func(_ context.Context, _ *slog.Logger, _ api.GetPromptRequestParams) (any, error) {
+	return nil, nil
+}
+
+var EmptyResourceHandle server.ResourceHandleFunc = func(_ context.Context, _ *slog.Logger, _ api.ReadResourceRequestParams) (any, error) {
+	return nil, nil
+}
+
+var EmptyToolHandle server.ToolHandleFunc = func(_ context.Context, _ *slog.Logger, _ api.CallToolRequestParams) (any, error) {
+	return nil, nil
+}
+
 func TestServer(t *testing.T) {
 	// given
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	c2s, s2c := channel.Direct()
 	cl := jrpc2.NewClient(c2s, &jrpc2.ClientOptions{})
-	srv := server.New("converse-mcp", "0.1").
-		Prompt(api.Prompt{Name: "my-first-prompt"}, server.EmptyPromptHandle).
-		Prompt(api.Prompt{Name: "my-second-prompt"}, server.EmptyPromptHandle).
-		Resource(api.Resource{Name: "my-first-resource"}, server.EmptyResourceHandle).
-		Resource(api.Resource{Name: "my-second-resource"}, server.EmptyResourceHandle).
-		Tool(api.Tool{Name: "my-first-tool"}, server.EmptyToolHandle).
-		Tool(api.Tool{Name: "my-second-tool"}, server.EmptyToolHandle).
-		Build(logger)
+	srv := server.New("converse-mcp", "0.1", logger).
+		WithPrompt(api.NewPrompt("my-first-prompt"), EmptyPromptHandle).
+		WithPrompt(api.NewPrompt("my-second-prompt"), EmptyPromptHandle).
+		WithResource(api.NewResource("my-first-resource", "https://example.com/my-first-resource"), EmptyResourceHandle).
+		WithResource(api.NewResource("my-second-resource", "https://example.com/my-second-resource"), EmptyResourceHandle).
+		WithTool(api.NewTool("my-first-tool"), EmptyToolHandle).
+		WithTool(api.NewTool("my-second-tool"), EmptyToolHandle).
+		Build()
 	srv.Start(s2c)
 	defer func(cl *jrpc2.Client, srv *jrpc2.Server) {
 		// close the streams
@@ -84,9 +96,11 @@ func TestServer(t *testing.T) {
 			Resources: []api.Resource{
 				{
 					Name: "my-first-resource",
+					Uri:  "https://example.com/my-first-resource",
 				},
 				{
 					Name: "my-second-resource",
+					Uri:  "https://example.com/my-second-resource",
 				},
 			},
 		}
@@ -104,9 +118,15 @@ func TestServer(t *testing.T) {
 			Tools: []api.Tool{
 				{
 					Name: "my-first-tool",
+					InputSchema: api.ToolInputSchema{
+						Type: "object",
+					},
 				},
 				{
 					Name: "my-second-tool",
+					InputSchema: api.ToolInputSchema{
+						Type: "object",
+					},
 				},
 			},
 		}

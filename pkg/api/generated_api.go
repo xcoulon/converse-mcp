@@ -2,10 +2,12 @@
 
 package api
 
-import "encoding/json"
-import "errors"
-import "fmt"
-import "reflect"
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"reflect"
+)
 
 // Optional annotations for the client. The client can use annotations to inform
 // how objects are used or displayed
@@ -2638,7 +2640,7 @@ func (j *PromptReference) UnmarshalJSON(value []byte) error {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *Prompt) UnmarshalJSON(value []byte) error {
+func (p *Prompt) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
 	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
@@ -2651,7 +2653,7 @@ func (j *Prompt) UnmarshalJSON(value []byte) error {
 	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
-	*j = Prompt(plain)
+	*p = Prompt(plain)
 	return nil
 }
 
@@ -3160,7 +3162,7 @@ func (j *ResourceUpdatedNotification) UnmarshalJSON(value []byte) error {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *Resource) UnmarshalJSON(value []byte) error {
+func (r *Resource) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
 	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
@@ -3176,7 +3178,7 @@ func (j *Resource) UnmarshalJSON(value []byte) error {
 	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
-	*j = Resource(plain)
+	*r = Resource(plain)
 	return nil
 }
 

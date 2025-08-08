@@ -22,9 +22,10 @@ type Builder struct {
 	prompts      []PromptHandler
 	resources    []ResourceHandler
 	tools        []ToolHandler
+	logger       *slog.Logger
 }
 
-func New(name, version string, capabilities ...api.ServerCapability) *Builder {
+func New(name, version string, logger *slog.Logger, capabilities ...api.ServerCapability) *Builder {
 	sc := api.DefaultCapabilities
 	for _, apply := range capabilities {
 		apply(&sc)
@@ -38,33 +39,34 @@ func New(name, version string, capabilities ...api.ServerCapability) *Builder {
 		prompts:   []PromptHandler{},
 		resources: []ResourceHandler{},
 		tools:     []ToolHandler{},
+		logger:    logger,
 	}
 }
 
-func (b *Builder) Build(logger *slog.Logger) *jrpc2.Server {
+func (b *Builder) Build() *jrpc2.Server {
 	mux := handler.Map{
 		"initialize":     initialize(b.capabilities, b.serverInfo),
 		"prompts/list":   listPrompts(b.prompts),
-		"prompts/get":    getPrompt(logger, b.prompts),
+		"prompts/get":    getPrompt(b.logger, b.prompts),
 		"resources/list": listResources(b.resources),
-		"resources/read": readResource(logger, b.resources),
+		"resources/read": readResource(b.logger, b.resources),
 		"tools/list":     listTools(b.tools),
-		"tools/call":     callTool(logger, b.tools),
+		"tools/call":     callTool(b.logger, b.tools),
 	}
 	opts := &jrpc2.ServerOptions{
 		Logger: func(text string) {
-			if err := logger.Handler().Handle(context.Background(), slog.Record{
+			if err := b.logger.Handler().Handle(context.Background(), slog.Record{
 				Level:   slog.LevelInfo,
 				Message: text,
 			}); err != nil {
-				logger.Error("error logging message", "error", err)
+				b.logger.Error("error logging message", "error", err)
 			}
 		},
 	}
 	return jrpc2.NewServer(mux, opts)
 }
 
-func (b *Builder) Prompt(prompt api.Prompt, handle PromptHandleFunc) *Builder {
+func (b *Builder) WithPrompt(prompt api.Prompt, handle PromptHandleFunc) *Builder {
 	b.prompts = append(b.prompts, PromptHandler{
 		Prompt: prompt,
 		Handle: handle,
@@ -72,7 +74,7 @@ func (b *Builder) Prompt(prompt api.Prompt, handle PromptHandleFunc) *Builder {
 	return b
 }
 
-func (b *Builder) Resource(resource api.Resource, handle ResourceHandleFunc) *Builder {
+func (b *Builder) WithResource(resource api.Resource, handle ResourceHandleFunc) *Builder {
 	b.resources = append(b.resources, ResourceHandler{
 		Resource: resource,
 		Handle:   handle,
@@ -85,7 +87,7 @@ func (b *Builder) Tools(tools ...ToolHandler) *Builder {
 	return b
 }
 
-func (b *Builder) Tool(tool api.Tool, handle ToolHandleFunc) *Builder {
+func (b *Builder) WithTool(tool api.Tool, handle ToolHandleFunc) *Builder {
 	b.tools = append(b.tools, ToolHandler{
 		Tool:   tool,
 		Handle: handle,
@@ -118,7 +120,7 @@ func listPrompts(handlers []PromptHandler) jrpc2.Handler {
 func getPrompt(logger *slog.Logger, handlers []PromptHandler) jrpc2.Handler {
 	prompts := make(map[string]PromptHandler, len(handlers))
 	for _, h := range handlers {
-		prompts[h.Name] = h
+		prompts[h.Prompt.Name] = h
 	}
 	return func(ctx context.Context, req *jrpc2.Request) (any, error) {
 		params := api.GetPromptRequestParams{}
@@ -147,7 +149,7 @@ func listResources(handlers []ResourceHandler) jrpc2.Handler {
 func readResource(logger *slog.Logger, handlers []ResourceHandler) jrpc2.Handler {
 	resources := make(map[string]ResourceHandler, len(handlers))
 	for _, h := range handlers {
-		resources[h.Name] = h
+		resources[h.Resource.Name] = h
 	}
 	return func(ctx context.Context, req *jrpc2.Request) (any, error) {
 		params := api.ReadResourceRequestParams{}
@@ -176,7 +178,7 @@ func listTools(handlers []ToolHandler) jrpc2.Handler {
 func callTool(logger *slog.Logger, handlers []ToolHandler) jrpc2.Handler {
 	tools := make(map[string]ToolHandler, len(handlers))
 	for _, h := range handlers {
-		tools[h.Name] = h
+		tools[h.Tool.Name] = h
 	}
 	return func(ctx context.Context, req *jrpc2.Request) (any, error) {
 		params := api.CallToolRequestParams{}

@@ -4,7 +4,7 @@ tasks:
   generate:
     cmds:
       - go install github.com/atombender/go-jsonschema@latest
-      - go-jsonschema -p internal/api resources/schema.json > pkg/api/api.go
+      - go-jsonschema -p internal/api resources/schema.json > pkg/api/generated_api.go
 
   test:
     cmds:
