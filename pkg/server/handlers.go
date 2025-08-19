@@ -7,6 +7,7 @@ import (
 	api "github.com/xcoulon/converse-mcp/pkg/api"
 )
 
+// TODO: remove logger
 type PromptHandleFunc func(ctx context.Context, logger *slog.Logger, params api.GetPromptRequestParams) (any, error)
 
 type PromptHandler struct {
@@ -14,6 +15,7 @@ type PromptHandler struct {
 	Handle PromptHandleFunc
 }
 
+// TODO: remove logger
 type ResourceHandleFunc func(ctx context.Context, logger *slog.Logger, params api.ReadResourceRequestParams) (any, error)
 
 type ResourceHandler struct {
@@ -21,6 +23,7 @@ type ResourceHandler struct {
 	Handle   ResourceHandleFunc
 }
 
+// TODO: remove logger
 type ToolHandleFunc func(ctx context.Context, logger *slog.Logger, params api.CallToolRequestParams) (any, error)
 
 type ToolHandler struct {

@@ -72,10 +72,19 @@ func TestServer(t *testing.T) {
 						Name:    "converse-mcp",
 						Version: "0.1",
 					},
-					Capabilities: api.DefaultCapabilities,
+					Capabilities: api.ServerCapabilities{
+						Prompts: &api.ServerCapabilitiesPrompts{
+							ListChanged: api.BoolPtr(true),
+						},
+						Resources: &api.ServerCapabilitiesResources{
+							ListChanged: api.BoolPtr(true),
+						},
+						Tools: &api.ServerCapabilitiesTools{
+							ListChanged: api.BoolPtr(true),
+						},
+					},
 				}
-				expectedJSON, err := json.Marshal(expected)
-				require.NoError(t, err)
+				expectedJSON, _ := json.Marshal(expected)
 				assert.JSONEq(t, string(expectedJSON), resp.ResultString())
 			})
 
@@ -130,14 +139,22 @@ func TestServer(t *testing.T) {
 				expected := api.ListToolsResult{
 					Tools: []api.Tool{
 						{
-							Name: "my-first-tool",
+							Name:        "my-first-tool",
+							Annotations: &api.ToolAnnotations{},
 							InputSchema: api.ToolInputSchema{
+								Type: "object",
+							},
+							OutputSchema: &api.ToolOutputSchema{
 								Type: "object",
 							},
 						},
 						{
-							Name: "my-second-tool",
+							Name:        "my-second-tool",
+							Annotations: &api.ToolAnnotations{},
 							InputSchema: api.ToolInputSchema{
+								Type: "object",
+							},
+							OutputSchema: &api.ToolOutputSchema{
 								Type: "object",
 							},
 						},

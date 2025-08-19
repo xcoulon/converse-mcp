@@ -1,9 +1,9 @@
 package api
 
-func ToBoolPtr(v bool) *bool {
+func BoolPtr(v bool) *bool {
 	return &v
 }
 
-func ToStringPtr(v string) *string {
-	return &v
-}
+// func StringPtr(v string) *string {
+// 	return &v
+// }
