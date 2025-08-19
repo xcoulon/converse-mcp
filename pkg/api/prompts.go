@@ -22,8 +22,13 @@ func (p Prompt) WithTitle(title string) Prompt {
 	return p
 }
 
-func (p Prompt) WithArgument(argument PromptArgument) Prompt {
-	p.Arguments = append(p.Arguments, argument)
+func (p Prompt) WithArgument(name, title, description string, required bool) Prompt {
+	p.Arguments = append(p.Arguments, PromptArgument{
+		Name:        name,
+		Title:       &title,
+		Description: &description,
+		Required:    &required,
+	})
 	return p
 }
 

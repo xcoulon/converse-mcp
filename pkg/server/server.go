@@ -20,14 +20,14 @@ var StdioChannel = channel.Line(os.Stdin, os.Stdout)
 
 func NewStdioServer(mux handler.Map, logger *slog.Logger) *jrpc2.Server {
 	return jrpc2.NewServer(mux, &jrpc2.ServerOptions{
-		Logger: SlogBridge(logger),
+		Logger: SlogToLogBridge(logger),
 	})
 }
 
 func NewHTTPHandler(mux handler.Map, logger *slog.Logger) http.Handler {
 	return jhttp.NewBridge(mux, &jhttp.BridgeOptions{
 		Server: &jrpc2.ServerOptions{
-			Logger: SlogBridge(logger),
+			Logger: SlogToLogBridge(logger),
 		},
 	})
 }
@@ -43,7 +43,17 @@ type MuxBuilder struct {
 
 func NewMux(name, version string, logger *slog.Logger) *MuxBuilder {
 	return &MuxBuilder{
-		capabilities: api.DefaultCapabilities,
+		capabilities: api.ServerCapabilities{
+			Prompts: &api.ServerCapabilitiesPrompts{
+				ListChanged: api.BoolPtr(false),
+			},
+			Resources: &api.ServerCapabilitiesResources{
+				ListChanged: api.BoolPtr(false),
+			},
+			Tools: &api.ServerCapabilitiesTools{
+				ListChanged: api.BoolPtr(false),
+			},
+		},
 		serverInfo: api.Implementation{
 			Name:    name,
 			Version: version,
@@ -55,26 +65,13 @@ func NewMux(name, version string, logger *slog.Logger) *MuxBuilder {
 	}
 }
 
-func (b *MuxBuilder) PromptListChangedCapability(v bool) *MuxBuilder {
-	b.capabilities.Prompts.ListChanged = api.ToBoolPtr(v)
-	return b
-}
-
-func (b *MuxBuilder) ResourceListChangedCapability(v bool) *MuxBuilder {
-	b.capabilities.Resources.ListChanged = api.ToBoolPtr(v)
-	return b
-}
-
-func (b *MuxBuilder) ToolListChangedCapability(v bool) *MuxBuilder {
-	b.capabilities.Tools.ListChanged = api.ToBoolPtr(v)
-	return b
-}
-
 func (b *MuxBuilder) WithPrompt(prompt api.Prompt, handle PromptHandleFunc) *MuxBuilder {
 	b.prompts = append(b.prompts, PromptHandler{
 		Prompt: prompt,
 		Handle: handle,
 	})
+	// Servers that support prompts MUST declare the prompts capability
+	b.capabilities.Prompts.ListChanged = api.BoolPtr(true)
 	return b
 }
 
@@ -83,6 +80,8 @@ func (b *MuxBuilder) WithResource(resource api.Resource, handle ResourceHandleFu
 		Resource: resource,
 		Handle:   handle,
 	})
+	// Servers that support resources MUST declare the resources capability
+	b.capabilities.Resources.ListChanged = api.BoolPtr(true)
 	return b
 }
 
@@ -91,6 +90,8 @@ func (b *MuxBuilder) WithTool(tool api.Tool, handle ToolHandleFunc) *MuxBuilder 
 		Tool:   tool,
 		Handle: handle,
 	})
+	// Servers that support tools MUST declare the tools capability
+	b.capabilities.Tools.ListChanged = api.BoolPtr(true)
 	return b
 }
 
@@ -106,7 +107,7 @@ func (b *MuxBuilder) Build() handler.Map {
 	}
 }
 
-func SlogBridge(logger *slog.Logger) jrpc2.Logger {
+func SlogToLogBridge(logger *slog.Logger) jrpc2.Logger {
 	return func(text string) {
 		if err := logger.Handler().Handle(context.Background(), slog.Record{
 			Level:   slog.LevelInfo,
