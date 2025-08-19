@@ -2,7 +2,8 @@ package api
 
 func NewPrompt(name string) Prompt {
 	return Prompt{
-		Name: name,
+		Name:      name,
+		Arguments: []PromptArgument{},
 	}
 }
 
@@ -18,6 +19,11 @@ func (p Prompt) WithDescription(description string) Prompt {
 
 func (p Prompt) WithTitle(title string) Prompt {
 	p.Title = &title
+	return p
+}
+
+func (p Prompt) WithArgument(argument PromptArgument) Prompt {
+	p.Arguments = append(p.Arguments, argument)
 	return p
 }
 
