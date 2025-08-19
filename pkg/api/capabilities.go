@@ -11,23 +11,3 @@ var DefaultCapabilities = ServerCapabilities{
 		ListChanged: ToBoolPtr(false),
 	},
 }
-
-type ServerCapability func(*ServerCapabilities)
-
-func PromptListChanged(v bool) ServerCapability {
-	return func(sc *ServerCapabilities) {
-		sc.Prompts.ListChanged = ToBoolPtr(v)
-	}
-}
-
-func ResourceListChanged(v bool) ServerCapability {
-	return func(sc *ServerCapabilities) {
-		sc.Resources.ListChanged = ToBoolPtr(v)
-	}
-}
-
-func ToolListChanged(v bool) ServerCapability {
-	return func(sc *ServerCapabilities) {
-		sc.Tools.ListChanged = ToBoolPtr(v)
-	}
-}

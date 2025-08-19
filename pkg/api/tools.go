@@ -1,9 +1,9 @@
 package api
 
-func NewTool(name string, properties ...PropertyDefinition) Tool {
+func NewTool(name string, inputProps ...PropertyDefinition) Tool {
 	return Tool{
 		Name:        name,
-		InputSchema: newToolInputSchema(properties),
+		InputSchema: newToolInputSchema(inputProps),
 	}
 }
 
@@ -27,14 +27,14 @@ func (t Tool) WithTitle(title string) Tool {
 	return t
 }
 
-func (t Tool) WithOutputSchema(properties ...PropertyDefinition) Tool {
-	t.OutputSchema = newToolOutputSchema(properties)
+func (t Tool) WithOutputSchema(outputProps ...PropertyDefinition) Tool {
+	t.OutputSchema = newToolOutputSchema(outputProps)
 	return t
 }
 
 type PropertyDefinition struct {
 	Name        string `json:"name"`
-	Type        string `json:"type"`
+	Type        string `json:"type"` // TODO: enum
 	Description string `json:"description"`
 	Required    bool   `json:"required"`
 }
