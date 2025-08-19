@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 
 	"github.com/creachadair/jrpc2"
 	"github.com/creachadair/jrpc2/channel"
 	"github.com/creachadair/jrpc2/handler"
+	"github.com/creachadair/jrpc2/jhttp"
 	"github.com/xcoulon/converse-mcp/pkg/api"
 )
 
@@ -16,7 +18,21 @@ const protocolVersion = "2025-06-18"
 
 var StdioChannel = channel.Line(os.Stdin, os.Stdout)
 
-type Builder struct {
+func NewStdioServer(mux handler.Map, logger *slog.Logger) *jrpc2.Server {
+	return jrpc2.NewServer(mux, &jrpc2.ServerOptions{
+		Logger: SlogBridge(logger),
+	})
+}
+
+func NewHTTPHandler(mux handler.Map, logger *slog.Logger) http.Handler {
+	return jhttp.NewBridge(mux, &jhttp.BridgeOptions{
+		Server: &jrpc2.ServerOptions{
+			Logger: SlogBridge(logger),
+		},
+	})
+}
+
+type MuxBuilder struct {
 	capabilities api.ServerCapabilities
 	serverInfo   api.Implementation
 	prompts      []PromptHandler
@@ -25,13 +41,9 @@ type Builder struct {
 	logger       *slog.Logger
 }
 
-func New(name, version string, logger *slog.Logger, capabilities ...api.ServerCapability) *Builder {
-	sc := api.DefaultCapabilities
-	for _, apply := range capabilities {
-		apply(&sc)
-	}
-	return &Builder{
-		capabilities: sc,
+func NewMux(name, version string, logger *slog.Logger) *MuxBuilder {
+	return &MuxBuilder{
+		capabilities: api.DefaultCapabilities,
 		serverInfo: api.Implementation{
 			Name:    name,
 			Version: version,
@@ -43,8 +55,47 @@ func New(name, version string, logger *slog.Logger, capabilities ...api.ServerCa
 	}
 }
 
-func (b *Builder) Build() *jrpc2.Server {
-	mux := handler.Map{
+func (b *MuxBuilder) PromptListChangedCapability(v bool) *MuxBuilder {
+	b.capabilities.Prompts.ListChanged = api.ToBoolPtr(v)
+	return b
+}
+
+func (b *MuxBuilder) ResourceListChangedCapability(v bool) *MuxBuilder {
+	b.capabilities.Resources.ListChanged = api.ToBoolPtr(v)
+	return b
+}
+
+func (b *MuxBuilder) ToolListChangedCapability(v bool) *MuxBuilder {
+	b.capabilities.Tools.ListChanged = api.ToBoolPtr(v)
+	return b
+}
+
+func (b *MuxBuilder) WithPrompt(prompt api.Prompt, handle PromptHandleFunc) *MuxBuilder {
+	b.prompts = append(b.prompts, PromptHandler{
+		Prompt: prompt,
+		Handle: handle,
+	})
+	return b
+}
+
+func (b *MuxBuilder) WithResource(resource api.Resource, handle ResourceHandleFunc) *MuxBuilder {
+	b.resources = append(b.resources, ResourceHandler{
+		Resource: resource,
+		Handle:   handle,
+	})
+	return b
+}
+
+func (b *MuxBuilder) WithTool(tool api.Tool, handle ToolHandleFunc) *MuxBuilder {
+	b.tools = append(b.tools, ToolHandler{
+		Tool:   tool,
+		Handle: handle,
+	})
+	return b
+}
+
+func (b *MuxBuilder) Build() handler.Map {
+	return handler.Map{
 		"initialize":     initialize(b.capabilities, b.serverInfo),
 		"prompts/list":   listPrompts(b.prompts),
 		"prompts/get":    getPrompt(b.logger, b.prompts),
@@ -53,46 +104,17 @@ func (b *Builder) Build() *jrpc2.Server {
 		"tools/list":     listTools(b.tools),
 		"tools/call":     callTool(b.logger, b.tools),
 	}
-	opts := &jrpc2.ServerOptions{
-		Logger: func(text string) {
-			if err := b.logger.Handler().Handle(context.Background(), slog.Record{
-				Level:   slog.LevelInfo,
-				Message: text,
-			}); err != nil {
-				b.logger.Error("error logging message", "error", err)
-			}
-		},
+}
+
+func SlogBridge(logger *slog.Logger) jrpc2.Logger {
+	return func(text string) {
+		if err := logger.Handler().Handle(context.Background(), slog.Record{
+			Level:   slog.LevelInfo,
+			Message: text,
+		}); err != nil {
+			logger.Error("error logging message", "error", err)
+		}
 	}
-	return jrpc2.NewServer(mux, opts)
-}
-
-func (b *Builder) WithPrompt(prompt api.Prompt, handle PromptHandleFunc) *Builder {
-	b.prompts = append(b.prompts, PromptHandler{
-		Prompt: prompt,
-		Handle: handle,
-	})
-	return b
-}
-
-func (b *Builder) WithResource(resource api.Resource, handle ResourceHandleFunc) *Builder {
-	b.resources = append(b.resources, ResourceHandler{
-		Resource: resource,
-		Handle:   handle,
-	})
-	return b
-}
-
-func (b *Builder) Tools(tools ...ToolHandler) *Builder {
-	b.tools = tools
-	return b
-}
-
-func (b *Builder) WithTool(tool api.Tool, handle ToolHandleFunc) *Builder {
-	b.tools = append(b.tools, ToolHandler{
-		Tool:   tool,
-		Handle: handle,
-	})
-	return b
 }
 
 func initialize(capabilities api.ServerCapabilities, serverInfo api.Implementation) jrpc2.Handler {
