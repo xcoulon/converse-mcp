@@ -17,15 +17,15 @@ import (
 	"github.com/xcoulon/converse-mcp/pkg/server"
 )
 
-var EmptyPromptHandle server.PromptHandleFunc = func(_ context.Context, _ *slog.Logger, _ api.GetPromptRequestParams) (any, error) {
+var EmptyPromptHandle server.PromptHandleFunc = func(_ context.Context, _ api.GetPromptRequestParams) (any, error) {
 	return nil, nil
 }
 
-var EmptyResourceHandle server.ResourceHandleFunc = func(_ context.Context, _ *slog.Logger, _ api.ReadResourceRequestParams) (any, error) {
+var EmptyResourceHandle server.ResourceHandleFunc = func(_ context.Context, _ api.ReadResourceRequestParams) (any, error) {
 	return nil, nil
 }
 
-var EmptyToolHandle server.ToolHandleFunc = func(_ context.Context, _ *slog.Logger, _ api.CallToolRequestParams) (any, error) {
+var EmptyToolHandle server.ToolHandleFunc = func(_ context.Context, _ api.CallToolRequestParams) (any, error) {
 	return nil, nil
 }
 
@@ -33,7 +33,7 @@ func TestServer(t *testing.T) {
 
 	// given
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	mux := server.NewMux("converse-mcp", "0.1", logger).
+	mux := server.NewMux("converse-mcp", "0.1").
 		WithPrompt(api.NewPrompt("my-first-prompt"), EmptyPromptHandle).
 		WithPrompt(api.NewPrompt("my-second-prompt"), EmptyPromptHandle).
 		WithResource(api.NewResource("my-first-resource", "https://example.com/my-first-resource"), EmptyResourceHandle).

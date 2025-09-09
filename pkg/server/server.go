@@ -38,10 +38,9 @@ type MuxBuilder struct {
 	prompts      []PromptHandler
 	resources    []ResourceHandler
 	tools        []ToolHandler
-	logger       *slog.Logger
 }
 
-func NewMux(name, version string, logger *slog.Logger) *MuxBuilder {
+func NewMux(name, version string) *MuxBuilder {
 	return &MuxBuilder{
 		capabilities: api.ServerCapabilities{
 			Prompts: &api.ServerCapabilitiesPrompts{
@@ -61,7 +60,6 @@ func NewMux(name, version string, logger *slog.Logger) *MuxBuilder {
 		prompts:   []PromptHandler{},
 		resources: []ResourceHandler{},
 		tools:     []ToolHandler{},
-		logger:    logger,
 	}
 }
 
@@ -99,11 +97,11 @@ func (b *MuxBuilder) Build() handler.Map {
 	return handler.Map{
 		"initialize":     initialize(b.capabilities, b.serverInfo),
 		"prompts/list":   listPrompts(b.prompts),
-		"prompts/get":    getPrompt(b.logger, b.prompts),
+		"prompts/get":    getPrompt(b.prompts),
 		"resources/list": listResources(b.resources),
-		"resources/read": readResource(b.logger, b.resources),
+		"resources/read": readResource(b.resources),
 		"tools/list":     listTools(b.tools),
-		"tools/call":     callTool(b.logger, b.tools),
+		"tools/call":     callTool(b.tools),
 	}
 }
 
@@ -129,7 +127,7 @@ func listPrompts(handlers []PromptHandler) jrpc2.Handler {
 	}
 }
 
-func getPrompt(logger *slog.Logger, handlers []PromptHandler) jrpc2.Handler {
+func getPrompt(handlers []PromptHandler) jrpc2.Handler {
 	prompts := make(map[string]PromptHandler, len(handlers))
 	for _, h := range handlers {
 		prompts[h.Prompt.Name] = h
@@ -140,7 +138,7 @@ func getPrompt(logger *slog.Logger, handlers []PromptHandler) jrpc2.Handler {
 			return nil, fmt.Errorf("error while unmarshalling '%s' request parameters: %w", req.Method(), err)
 		}
 		if h, ok := prompts[params.Name]; ok {
-			return h.Handle(ctx, logger, params)
+			return h.Handle(ctx, params)
 		}
 		return nil, fmt.Errorf("prompt '%s' does not exist", params.Name)
 	}
@@ -158,7 +156,7 @@ func listResources(handlers []ResourceHandler) jrpc2.Handler {
 	}
 }
 
-func readResource(logger *slog.Logger, handlers []ResourceHandler) jrpc2.Handler {
+func readResource(handlers []ResourceHandler) jrpc2.Handler {
 	resources := make(map[string]ResourceHandler, len(handlers))
 	for _, h := range handlers {
 		resources[h.Resource.Name] = h
@@ -169,7 +167,7 @@ func readResource(logger *slog.Logger, handlers []ResourceHandler) jrpc2.Handler
 			return nil, fmt.Errorf("error while unmarshalling '%s' request parameters: %w", req.Method(), err)
 		}
 		if h, ok := resources[params.Uri]; ok {
-			return h.Handle(ctx, logger, params)
+			return h.Handle(ctx, params)
 		}
 		return nil, fmt.Errorf("resource '%s' does not exist", params.Uri)
 	}
@@ -187,7 +185,7 @@ func listTools(handlers []ToolHandler) jrpc2.Handler {
 	}
 }
 
-func callTool(logger *slog.Logger, handlers []ToolHandler) jrpc2.Handler {
+func callTool(handlers []ToolHandler) jrpc2.Handler {
 	tools := make(map[string]ToolHandler, len(handlers))
 	for _, h := range handlers {
 		tools[h.Tool.Name] = h
@@ -198,7 +196,7 @@ func callTool(logger *slog.Logger, handlers []ToolHandler) jrpc2.Handler {
 			return nil, fmt.Errorf("error while unmarshalling '%s' request parameters: %w", req.Method(), err)
 		}
 		if h, ok := tools[params.Name]; ok {
-			return h.Handle(ctx, logger, params)
+			return h.Handle(ctx, params)
 		}
 		return nil, fmt.Errorf("tool '%s' does not exist", params.Name)
 	}
