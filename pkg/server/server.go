@@ -107,17 +107,6 @@ func (b *MuxBuilder) Build() handler.Map {
 	}
 }
 
-func SlogToLogBridge(logger *slog.Logger) jrpc2.Logger {
-	return func(text string) {
-		if err := logger.Handler().Handle(context.Background(), slog.Record{
-			Level:   slog.LevelInfo,
-			Message: text,
-		}); err != nil {
-			logger.Error("error logging message", "error", err)
-		}
-	}
-}
-
 func initialize(capabilities api.ServerCapabilities, serverInfo api.Implementation) jrpc2.Handler {
 	return func(_ context.Context, _ *jrpc2.Request) (any, error) {
 		return &api.InitializeResult{
