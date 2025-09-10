@@ -17,16 +17,16 @@ import (
 	"github.com/xcoulon/converse-mcp/pkg/server"
 )
 
-var EmptyPromptHandle server.PromptHandleFunc = func(_ context.Context, _ api.GetPromptRequestParams) (any, error) {
-	return nil, nil
+var EmptyPromptHandle server.PromptHandleFunc = func(_ context.Context, _ api.GetPromptRequestParams) (api.GetPromptResult, error) {
+	return api.GetPromptResult{}, nil
 }
 
-var EmptyResourceHandle server.ResourceHandleFunc = func(_ context.Context, _ api.ReadResourceRequestParams) (any, error) {
-	return nil, nil
+var EmptyResourceHandle server.ResourceHandleFunc = func(_ context.Context, _ api.ReadResourceRequestParams) (api.ReadResourceResult, error) {
+	return api.ReadResourceResult{}, nil
 }
 
-var EmptyToolHandle server.ToolHandleFunc = func(_ context.Context, _ api.CallToolRequestParams) (any, error) {
-	return nil, nil
+var EmptyToolHandle server.ToolHandleFunc = func(_ context.Context, _ api.CallToolRequestParams) (api.CallToolResult, error) {
+	return api.CallToolResult{}, nil
 }
 
 func TestServer(t *testing.T) {
