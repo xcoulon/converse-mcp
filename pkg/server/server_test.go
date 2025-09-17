@@ -33,7 +33,7 @@ func TestServer(t *testing.T) {
 
 	// given
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	mux := server.NewMux("converse-mcp", "0.1").
+	mux := server.NewMux("converse-mcp", "0.1", logger).
 		WithPrompt(api.NewPrompt("my-first-prompt"), EmptyPromptHandle).
 		WithPrompt(api.NewPrompt("my-second-prompt"), EmptyPromptHandle).
 		WithResource(api.NewResource("my-first-resource", "https://example.com/my-first-resource"), EmptyResourceHandle).
