@@ -38,9 +38,10 @@ type MuxBuilder struct {
 	prompts      []PromptHandler
 	resources    []ResourceHandler
 	tools        []ToolHandler
+	logger       *slog.Logger
 }
 
-func NewMux(name, version string) *MuxBuilder {
+func NewMux(name, version string, logger *slog.Logger) *MuxBuilder {
 	return &MuxBuilder{
 		capabilities: api.ServerCapabilities{
 			Prompts: &api.ServerCapabilitiesPrompts{
@@ -60,10 +61,12 @@ func NewMux(name, version string) *MuxBuilder {
 		prompts:   []PromptHandler{},
 		resources: []ResourceHandler{},
 		tools:     []ToolHandler{},
+		logger:    logger,
 	}
 }
 
 func (b *MuxBuilder) WithPrompt(prompt api.Prompt, handle PromptHandleFunc) *MuxBuilder {
+	b.logger.Debug("with prompt", "prompt", prompt.Name)
 	b.prompts = append(b.prompts, PromptHandler{
 		Prompt: prompt,
 		Handle: handle,
@@ -74,6 +77,7 @@ func (b *MuxBuilder) WithPrompt(prompt api.Prompt, handle PromptHandleFunc) *Mux
 }
 
 func (b *MuxBuilder) WithResource(resource api.Resource, handle ResourceHandleFunc) *MuxBuilder {
+	b.logger.Debug("with resource", "resource", resource.Name)
 	b.resources = append(b.resources, ResourceHandler{
 		Resource: resource,
 		Handle:   handle,
@@ -84,6 +88,7 @@ func (b *MuxBuilder) WithResource(resource api.Resource, handle ResourceHandleFu
 }
 
 func (b *MuxBuilder) WithTool(tool api.Tool, handle ToolHandleFunc) *MuxBuilder {
+	b.logger.Debug("with tool", "tool", tool.Name)
 	b.tools = append(b.tools, ToolHandler{
 		Tool:   tool,
 		Handle: handle,
@@ -95,18 +100,19 @@ func (b *MuxBuilder) WithTool(tool api.Tool, handle ToolHandleFunc) *MuxBuilder 
 
 func (b *MuxBuilder) Build() handler.Map {
 	return handler.Map{
-		"initialize":     initialize(b.capabilities, b.serverInfo),
-		"prompts/list":   listPrompts(b.prompts),
-		"prompts/get":    getPrompt(b.prompts),
-		"resources/list": listResources(b.resources),
-		"resources/read": readResource(b.resources),
-		"tools/list":     listTools(b.tools),
-		"tools/call":     callTool(b.tools),
+		"initialize":     initialize(b.capabilities, b.serverInfo, b.logger),
+		"prompts/list":   listPrompts(b.prompts, b.logger),
+		"prompts/get":    getPrompt(b.prompts, b.logger),
+		"resources/list": listResources(b.resources, b.logger),
+		"resources/read": readResource(b.resources, b.logger),
+		"tools/list":     listTools(b.tools, b.logger),
+		"tools/call":     callTool(b.tools, b.logger),
 	}
 }
 
-func initialize(capabilities api.ServerCapabilities, serverInfo api.Implementation) jrpc2.Handler {
+func initialize(capabilities api.ServerCapabilities, serverInfo api.Implementation, logger *slog.Logger) jrpc2.Handler {
 	return func(_ context.Context, _ *jrpc2.Request) (any, error) {
+		logger.Debug("initialize")
 		return &api.InitializeResult{
 			ProtocolVersion: protocolVersion,
 			ServerInfo:      serverInfo,
@@ -115,19 +121,20 @@ func initialize(capabilities api.ServerCapabilities, serverInfo api.Implementati
 	}
 }
 
-func listPrompts(handlers []PromptHandler) jrpc2.Handler {
+func listPrompts(handlers []PromptHandler, logger *slog.Logger) jrpc2.Handler {
 	prompts := make([]api.Prompt, 0, len(handlers))
 	for _, h := range handlers {
 		prompts = append(prompts, h.Prompt)
 	}
 	return func(_ context.Context, _ *jrpc2.Request) (any, error) {
+		logger.Debug("list prompts")
 		return &api.ListPromptsResult{
 			Prompts: prompts,
 		}, nil
 	}
 }
 
-func getPrompt(handlers []PromptHandler) jrpc2.Handler {
+func getPrompt(handlers []PromptHandler, logger *slog.Logger) jrpc2.Handler {
 	prompts := make(map[string]PromptHandler, len(handlers))
 	for _, h := range handlers {
 		prompts[h.Prompt.Name] = h
@@ -137,6 +144,7 @@ func getPrompt(handlers []PromptHandler) jrpc2.Handler {
 		if err := req.UnmarshalParams(&params); err != nil {
 			return nil, fmt.Errorf("error while unmarshalling '%s' request parameters: %w", req.Method(), err)
 		}
+		logger.Debug("get prompt", "name", params.Name)
 		if h, ok := prompts[params.Name]; ok {
 			return h.Handle(ctx, params)
 		}
@@ -144,19 +152,20 @@ func getPrompt(handlers []PromptHandler) jrpc2.Handler {
 	}
 }
 
-func listResources(handlers []ResourceHandler) jrpc2.Handler {
+func listResources(handlers []ResourceHandler, logger *slog.Logger) jrpc2.Handler {
 	resources := make([]api.Resource, 0, len(handlers))
 	for _, h := range handlers {
 		resources = append(resources, h.Resource)
 	}
 	return func(_ context.Context, _ *jrpc2.Request) (any, error) {
+		logger.Debug("list resources")
 		return &api.ListResourcesResult{
 			Resources: resources,
 		}, nil
 	}
 }
 
-func readResource(handlers []ResourceHandler) jrpc2.Handler {
+func readResource(handlers []ResourceHandler, logger *slog.Logger) jrpc2.Handler {
 	resources := make(map[string]ResourceHandler, len(handlers))
 	for _, h := range handlers {
 		resources[h.Resource.Name] = h
@@ -166,6 +175,7 @@ func readResource(handlers []ResourceHandler) jrpc2.Handler {
 		if err := req.UnmarshalParams(&params); err != nil {
 			return nil, fmt.Errorf("error while unmarshalling '%s' request parameters: %w", req.Method(), err)
 		}
+		logger.Debug("read resource", "uri", params.Uri)
 		if h, ok := resources[params.Uri]; ok {
 			return h.Handle(ctx, params)
 		}
@@ -173,19 +183,20 @@ func readResource(handlers []ResourceHandler) jrpc2.Handler {
 	}
 }
 
-func listTools(handlers []ToolHandler) jrpc2.Handler {
+func listTools(handlers []ToolHandler, logger *slog.Logger) jrpc2.Handler {
 	tools := make([]api.Tool, 0, len(handlers))
 	for _, h := range handlers {
 		tools = append(tools, h.Tool)
 	}
 	return func(_ context.Context, _ *jrpc2.Request) (any, error) {
+		logger.Debug("list tools")
 		return &api.ListToolsResult{
 			Tools: tools,
 		}, nil
 	}
 }
 
-func callTool(handlers []ToolHandler) jrpc2.Handler {
+func callTool(handlers []ToolHandler, logger *slog.Logger) jrpc2.Handler {
 	tools := make(map[string]ToolHandler, len(handlers))
 	for _, h := range handlers {
 		tools[h.Tool.Name] = h
@@ -195,6 +206,7 @@ func callTool(handlers []ToolHandler) jrpc2.Handler {
 		if err := req.UnmarshalParams(&params); err != nil {
 			return nil, fmt.Errorf("error while unmarshalling '%s' request parameters: %w", req.Method(), err)
 		}
+		logger.Debug("call tool", "name", params.Name)
 		if h, ok := tools[params.Name]; ok {
 			return h.Handle(ctx, params)
 		}
