@@ -8,13 +8,14 @@ import (
 	"os"
 	"testing"
 
+	"github.com/xcoulon/converse-mcp/pkg/api"
+	"github.com/xcoulon/converse-mcp/pkg/server"
+
 	"github.com/creachadair/jrpc2"
 	"github.com/creachadair/jrpc2/channel"
 	"github.com/creachadair/jrpc2/jhttp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	api "github.com/xcoulon/converse-mcp/pkg/api"
-	"github.com/xcoulon/converse-mcp/pkg/server"
 )
 
 var EmptyPromptHandle server.PromptHandleFunc = func(_ context.Context, _ api.GetPromptRequestParams) (api.GetPromptResult, error) {
@@ -33,7 +34,7 @@ func TestServer(t *testing.T) {
 
 	// given
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	mux := server.NewMux("converse-mcp", "0.1", logger).
+	router := server.NewRouterBuilder("converse-mcp", "0.1", logger).
 		WithPrompt(api.NewPrompt("my-first-prompt"), EmptyPromptHandle).
 		WithPrompt(api.NewPrompt("my-second-prompt"), EmptyPromptHandle).
 		WithResource(api.NewResource("my-first-resource", "https://example.com/my-first-resource"), EmptyResourceHandle).
@@ -43,20 +44,24 @@ func TestServer(t *testing.T) {
 		Build()
 	// stdio server
 	c2s, s2c := channel.Direct()
-	directCl := jrpc2.NewClient(c2s, &jrpc2.ClientOptions{})
-	stdioSrv := server.NewStdioServer(mux, logger)
+	stdioCl := jrpc2.NewClient(c2s, &jrpc2.ClientOptions{})
+	stdioSrv := server.NewStdioServer(logger, router)
 	stdioSrv.Start(s2c)
-	defer directCl.Close()
-	defer stdioSrv.Stop()
+	defer func() {
+		require.NoError(t, stdioCl.Close())
+		stdioSrv.Stop()
+	}()
 
 	// http server
-	hsrv := httptest.NewServer(server.NewHTTPHandler(mux, logger))
-	httpCl := jrpc2.NewClient(jhttp.NewChannel(hsrv.URL, nil), nil)
-	defer httpCl.Close()
-	defer hsrv.Close()
+	httpSrv := httptest.NewServer(server.NewHTTPHandler(router, logger))
+	httpCl := jrpc2.NewClient(jhttp.NewChannel(httpSrv.URL, nil), nil)
+	defer func() {
+		require.NoError(t, httpCl.Close())
+	}()
+	defer httpSrv.Close()
 
 	for name, cl := range map[string]*jrpc2.Client{
-		"stdio": directCl,
+		"stdio": stdioCl,
 		"http":  httpCl,
 	} {
 		t.Run(name, func(t *testing.T) {
