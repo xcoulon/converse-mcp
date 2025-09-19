@@ -33,7 +33,7 @@ func NewStreamableHTTPServer(logger *slog.Logger, router Router, port int) *Stre
 	}))
 	mux.Handle("/mcp", NewHTTPHandler(router, logger))
 	srv := &http.Server{
-		Addr:        fmt.Sprintf("127.0.0.1:%d", port),
+		Addr:        fmt.Sprintf(":%d", port),
 		Handler:     mux,
 		ReadTimeout: 10 * time.Second,
 	}
