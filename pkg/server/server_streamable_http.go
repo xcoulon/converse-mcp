@@ -27,10 +27,10 @@ type StreamableHTTPServer struct {
 // Use `srv.Wait()` to wait for the server to receive a shutdown signal (`syscall.SIGINT` or `syscall.SIGTERM`)
 func NewStreamableHTTPServer(logger *slog.Logger, router Router, port int) *StreamableHTTPServer {
 	mux := http.NewServeMux()
-	mux.Handle("/_health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/_health", LoggingMiddleware(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		logger.Debug("Health check request", "method", r.Method, "uri", r.RequestURI)
 		w.WriteHeader(http.StatusOK)
-	}))
+	})))
 	mux.Handle("/mcp", NewHTTPHandler(router, logger))
 	srv := &http.Server{
 		Addr:        fmt.Sprintf(":%d", port),
